@@ -13,6 +13,7 @@ import {
   definirDefault,
   removerImagem
 } from './servicos/imagens'
+import { importarPlanilha } from './import/flow'
 
 const t = tipc.create()
 
@@ -93,6 +94,17 @@ export const router = {
     .action(async ({ input }) => {
       await removerImagem(input.imagem_id)
       return { ok: true }
+    }),
+
+  'import.planilha': t.procedure
+    .input<{
+      text: string
+      data_inicio: string
+      data_fim: string
+      arquivo_nome: string
+    }>()
+    .action(async ({ input }) => {
+      return importarPlanilha(input)
     })
 }
 
