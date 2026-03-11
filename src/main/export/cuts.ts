@@ -6,7 +6,7 @@ import { EXPORT_DIMENSIONS } from '../../shared/constants'
 import path from 'path'
 import fs from 'fs/promises'
 
-interface ExportResult {
+export interface ExportResult {
   files: string[]
   outputDir: string
 }
