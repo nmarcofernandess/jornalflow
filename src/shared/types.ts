@@ -146,6 +146,7 @@ export interface MatchResult {
 }
 
 export interface ImportResult {
+  jornal_id: number
   rows: MatchResult[]
   total: number
   matched: number

@@ -132,5 +132,5 @@ export async function importarPlanilha(input: ImportInput): Promise<ImportResult
     [jornal_id, input.arquivo_nome, stats.total, stats.matched, stats.fallbacks, stats.nao_encontrados]
   )
 
-  return { rows: results, ...stats }
+  return { jornal_id, rows: results, ...stats }
 }
