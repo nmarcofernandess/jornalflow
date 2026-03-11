@@ -1,6 +1,12 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { registerIpcMain } from '@egoist/tipc/main'
+import { router } from './tipc'
+import { ensureDataDirs } from './db/database'
+import { getDb } from './db/database'
+import { applyMigrations } from './db/schema'
+import { seed } from './db/seed'
 import icon from '../../resources/icon.png?asset'
 
 function createWindow(): void {
@@ -38,7 +44,7 @@ function createWindow(): void {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.electron')
 
@@ -49,8 +55,14 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  // IPC test
-  ipcMain.on('ping', () => console.log('pong'))
+  // Register tipc IPC handlers
+  registerIpcMain(router)
+
+  // Initialize data directories and database
+  await ensureDataDirs()
+  await getDb()
+  await applyMigrations()
+  await seed()
 
   createWindow()
 
