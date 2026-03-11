@@ -13,6 +13,11 @@ import {
   definirDefault,
   removerImagem
 } from './servicos/imagens'
+import {
+  carregarJornal,
+  atualizarItem,
+  listarRascunhos
+} from './servicos/jornais'
 import { importarPlanilha } from './import/flow'
 
 const t = tipc.create()
@@ -105,7 +110,24 @@ export const router = {
     }>()
     .action(async ({ input }) => {
       return importarPlanilha(input)
-    })
+    }),
+
+  'jornal.carregar': t.procedure
+    .input<{ jornal_id: number }>()
+    .action(async ({ input }) => {
+      return carregarJornal(input.jornal_id)
+    }),
+
+  'jornal.atualizar_item': t.procedure
+    .input<{ item_id: number; changes: Record<string, unknown> }>()
+    .action(async ({ input }) => {
+      await atualizarItem(input.item_id, input.changes)
+      return { ok: true }
+    }),
+
+  'jornal.listar_rascunhos': t.procedure.action(async () => {
+    return listarRascunhos()
+  })
 }
 
 export type Router = typeof router
