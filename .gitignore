@@ -1,0 +1,23 @@
+node_modules
+dist
+out
+.DS_Store
+.eslintcache
+*.log*
+
+# Runtime data (user images, database, exports)
+data/images/products/
+data/images/assets/
+data/exports/
+data/pglite/
+
+# Keep data structure
+!data/.gitkeep
+!data/images/.gitkeep
+!data/images/products/.gitkeep
+!data/images/assets/.gitkeep
+!data/exports/.gitkeep
+
+# Environment
+.env
+.env.local
