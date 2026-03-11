@@ -7,6 +7,12 @@ import {
   porCodigo,
   deletarProduto
 } from './servicos/produtos'
+import {
+  listarImagens,
+  adicionarImagem,
+  definirDefault,
+  removerImagem
+} from './servicos/imagens'
 
 const t = tipc.create()
 
@@ -60,6 +66,32 @@ export const router = {
     .input<{ produto_id: number }>()
     .action(async ({ input }) => {
       await deletarProduto(input.produto_id)
+      return { ok: true }
+    }),
+
+  'imagens.listar': t.procedure
+    .input<{ produto_id: number }>()
+    .action(async ({ input }) => {
+      return listarImagens(input.produto_id)
+    }),
+
+  'imagens.adicionar': t.procedure
+    .input<{ produto_id: number; source_path: string; variacao?: string }>()
+    .action(async ({ input }) => {
+      return adicionarImagem(input.produto_id, input.source_path, input.variacao)
+    }),
+
+  'imagens.definir_default': t.procedure
+    .input<{ imagem_id: number }>()
+    .action(async ({ input }) => {
+      await definirDefault(input.imagem_id)
+      return { ok: true }
+    }),
+
+  'imagens.remover': t.procedure
+    .input<{ imagem_id: number }>()
+    .action(async ({ input }) => {
+      await removerImagem(input.imagem_id)
       return { ok: true }
     })
 }
