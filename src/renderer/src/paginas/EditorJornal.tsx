@@ -7,7 +7,10 @@ import { PainelImport } from '@renderer/componentes/editor/PainelImport'
 import { PainelSecoes } from '@renderer/componentes/editor/PainelSecoes'
 import { PainelItem } from '@renderer/componentes/editor/PainelItem'
 import { PainelAlertas } from '@renderer/componentes/editor/PainelAlertas'
+import { ExportDialog } from '@renderer/componentes/editor/ExportDialog'
 import { Skeleton } from '@renderer/components/ui/skeleton'
+import { Button } from '@renderer/components/ui/button'
+import { Download } from 'lucide-react'
 
 type EditorTab = 'import' | 'secoes' | 'item' | 'alertas'
 
@@ -22,6 +25,7 @@ export default function EditorJornal() {
   const { jornal_id } = useParams()
   const store = useEditorStore()
   const [tab, setTab] = useState<EditorTab>('import')
+  const [exportOpen, setExportOpen] = useState(false)
 
   useEffect(() => {
     if (jornal_id) {
@@ -85,7 +89,20 @@ export default function EditorJornal() {
       </div>
 
       {/* Right Panel — Preview */}
-      <div className="flex-1 overflow-auto bg-gray-100 p-4">
+      <div className="flex-1 overflow-auto bg-gray-100 flex flex-col">
+        {store.jornal && (
+          <div className="flex items-center justify-end px-4 py-2 border-b bg-background flex-shrink-0">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setExportOpen(true)}
+            >
+              <Download className="h-4 w-4" />
+              Exportar
+            </Button>
+          </div>
+        )}
+        <div className="flex-1 overflow-auto p-4">
         {store.loading ? (
           <div className="flex flex-col gap-4 max-w-4xl mx-auto">
             <Skeleton className="h-40 w-full rounded-lg" />
@@ -119,7 +136,16 @@ export default function EditorJornal() {
             </div>
           </div>
         )}
+        </div>
       </div>
+
+      {store.jornal && (
+        <ExportDialog
+          jornal_id={store.jornal.jornal_id}
+          open={exportOpen}
+          onClose={() => setExportOpen(false)}
+        />
+      )}
     </div>
   )
 }

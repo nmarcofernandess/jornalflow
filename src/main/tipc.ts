@@ -134,6 +134,14 @@ export const router = {
     .action(async ({ input }) => {
       const { exportAll } = await import('./export/cuts')
       return exportAll(input.jornal_id)
+    }),
+
+  'shell.abrir_pasta': t.procedure
+    .input<{ caminho: string }>()
+    .action(async ({ input }) => {
+      const { shell } = await import('electron')
+      await shell.openPath(input.caminho)
+      return { ok: true }
     })
 }
 
