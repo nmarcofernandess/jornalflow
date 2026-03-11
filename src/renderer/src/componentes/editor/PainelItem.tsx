@@ -5,7 +5,10 @@ import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
 import { Badge } from '@renderer/components/ui/badge'
-import { Save, Package } from 'lucide-react'
+import { Save, Package, ImagePlus } from 'lucide-react'
+import { ImagePicker } from './ImagePicker'
+import { ImageComposer } from './ImageComposer'
+import type { ProdutoImagem } from '@shared/types'
 
 export function PainelItem() {
   const { selected_item_id, itens, produtos_map, imagens_map, updateItem } = useEditorStore()
@@ -23,6 +26,7 @@ export function PainelItem() {
   const [img_offset_y, setImgOffsetY] = useState(0)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
+  const [picker_open, setPickerOpen] = useState(false)
 
   // Sync local state when selected item changes
   const syncFromItem = useCallback(() => {
@@ -43,6 +47,29 @@ export function PainelItem() {
 
   function markDirty() {
     setDirty(true)
+  }
+
+  async function handleImageSelect(imagem: ProdutoImagem) {
+    if (!item) return
+    const changes = { imagem_id: imagem.imagem_id }
+    try {
+      await atualizarItem(item.item_id, changes)
+      updateItem(item.item_id, changes)
+    } catch (err) {
+      console.error('Erro ao trocar imagem:', err)
+    }
+  }
+
+  async function handleImgsCompostas(paths: string[]) {
+    if (!item) return
+    const imgs_compostas = paths.length > 0 ? paths : null
+    const changes = { imgs_compostas }
+    try {
+      await atualizarItem(item.item_id, changes)
+      updateItem(item.item_id, changes)
+    } catch (err) {
+      console.error('Erro ao atualizar composicao:', err)
+    }
   }
 
   async function handleSave() {
@@ -115,6 +142,34 @@ export function PainelItem() {
             }}
           />
         </div>
+      )}
+
+      {/* Image picker trigger */}
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setPickerOpen(true)}
+        className="w-full text-xs"
+      >
+        <ImagePlus className="h-3.5 w-3.5 mr-1.5" />
+        Trocar Imagem
+      </Button>
+
+      <ImagePicker
+        produto_id={item.produto_id}
+        current_imagem_id={item.imagem_id}
+        open={picker_open}
+        onClose={() => setPickerOpen(false)}
+        onSelect={handleImageSelect}
+      />
+
+      {/* Multi-image composer */}
+      {item.imgs_compostas !== undefined && (
+        <ImageComposer
+          produto_id={item.produto_id}
+          imgs_compostas={item.imgs_compostas}
+          onChange={handleImgsCompostas}
+        />
       )}
 
       {/* Price fields */}
