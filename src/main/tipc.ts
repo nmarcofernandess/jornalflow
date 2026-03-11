@@ -21,7 +21,11 @@ import {
   buscarProdutoNoHistorico,
   dashboardStats,
   getLoja,
-  atualizarLoja
+  atualizarLoja,
+  criarJornalEspecial,
+  adicionarPagina,
+  adicionarSecao,
+  adicionarItemASecao
 } from './servicos/jornais'
 import { importarPlanilha } from './import/flow'
 
@@ -144,6 +148,44 @@ export const router = {
   'jornal.listar_rascunhos': t.procedure.action(async () => {
     return listarRascunhos()
   }),
+
+  'jornal.criar_especial': t.procedure
+    .input<{ titulo: string; data_inicio: string; data_fim: string }>()
+    .action(async ({ input }) => {
+      return criarJornalEspecial(input)
+    }),
+
+  'jornal.adicionar_pagina': t.procedure
+    .input<{ jornal_id: number; layout?: 'full' | 'dupla' }>()
+    .action(async ({ input }) => {
+      return adicionarPagina(input.jornal_id, input.layout)
+    }),
+
+  'jornal.adicionar_secao': t.procedure
+    .input<{
+      jornal_id: number
+      pagina_id: number
+      nome_custom: string
+      lado?: 'full' | 'esquerda' | 'direita'
+      grid_cols?: number
+      grid_rows?: number
+    }>()
+    .action(async ({ input }) => {
+      return adicionarSecao(input)
+    }),
+
+  'jornal.adicionar_item': t.procedure
+    .input<{
+      jornal_id: number
+      jornal_secao_id: number
+      produto_id: number
+      preco_oferta: number
+      preco_clube?: number
+    }>()
+    .action(async ({ input }) => {
+      await adicionarItemASecao(input)
+      return { ok: true }
+    }),
 
   'historico.listar': t.procedure.action(async () => {
     return listarJornais()

@@ -175,6 +175,93 @@ export async function getLoja(): Promise<Loja | null> {
   return queryOne<Loja>('SELECT * FROM lojas LIMIT 1')
 }
 
+export async function criarJornalEspecial(input: {
+  titulo: string
+  data_inicio: string
+  data_fim: string
+}): Promise<Jornal> {
+  await execute(
+    `INSERT INTO jornais (titulo, tipo, data_inicio, data_fim, status)
+     VALUES ($1, 'especial', $2, $3, 'rascunho')`,
+    [input.titulo, input.data_inicio, input.data_fim]
+  )
+  const jornal = await queryOne<Jornal>(
+    "SELECT * FROM jornais WHERE tipo = 'especial' ORDER BY jornal_id DESC LIMIT 1"
+  )
+  if (!jornal) throw new Error('Falha ao criar jornal especial')
+  return jornal
+}
+
+export async function adicionarPagina(jornal_id: number, layout: 'full' | 'dupla' = 'full'): Promise<JornalPagina> {
+  const maxNum = await queryOne<{ max: number }>(
+    'SELECT COALESCE(MAX(numero), 0)::int as max FROM jornal_paginas WHERE jornal_id = $1',
+    [jornal_id]
+  )
+  const numero = (maxNum?.max ?? 0) + 1
+
+  await execute(
+    'INSERT INTO jornal_paginas (jornal_id, numero, layout) VALUES ($1, $2, $3)',
+    [jornal_id, numero, layout]
+  )
+
+  return (await queryOne<JornalPagina>(
+    'SELECT * FROM jornal_paginas WHERE jornal_id = $1 AND numero = $2',
+    [jornal_id, numero]
+  ))!
+}
+
+export async function adicionarSecao(input: {
+  jornal_id: number
+  pagina_id: number
+  nome_custom: string
+  lado?: 'full' | 'esquerda' | 'direita'
+  grid_cols?: number
+  grid_rows?: number
+}): Promise<JornalSecao> {
+  const maxPos = await queryOne<{ max: number }>(
+    'SELECT COALESCE(MAX(posicao), 0)::int as max FROM jornal_secoes WHERE pagina_id = $1',
+    [input.pagina_id]
+  )
+  const posicao = (maxPos?.max ?? 0) + 1
+
+  await execute(
+    `INSERT INTO jornal_secoes (jornal_id, pagina_id, posicao, lado, grid_cols, grid_rows, nome_custom)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [input.jornal_id, input.pagina_id, posicao, input.lado ?? 'full', input.grid_cols ?? 3, input.grid_rows ?? 3, input.nome_custom]
+  )
+
+  return (await queryOne<JornalSecao>(
+    'SELECT * FROM jornal_secoes WHERE jornal_id = $1 AND pagina_id = $2 AND posicao = $3',
+    [input.jornal_id, input.pagina_id, posicao]
+  ))!
+}
+
+export async function adicionarItemASecao(input: {
+  jornal_id: number
+  jornal_secao_id: number
+  produto_id: number
+  preco_oferta: number
+  preco_clube?: number
+}): Promise<void> {
+  const maxPos = await queryOne<{ max: number }>(
+    'SELECT COALESCE(MAX(posicao), 0)::int as max FROM jornal_itens WHERE jornal_secao_id = $1',
+    [input.jornal_secao_id]
+  )
+  const posicao = (maxPos?.max ?? 0) + 1
+
+  // Try to find product's default image
+  const img = await queryOne<{ imagem_id: number }>(
+    'SELECT imagem_id FROM produto_imagens WHERE produto_id = $1 AND is_default = true LIMIT 1',
+    [input.produto_id]
+  )
+
+  await execute(
+    `INSERT INTO jornal_itens (jornal_id, jornal_secao_id, posicao, produto_id, preco_oferta, preco_clube, imagem_id, is_fallback, img_scale, img_offset_x, img_offset_y)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1.0, 0, 0)`,
+    [input.jornal_id, input.jornal_secao_id, posicao, input.produto_id, input.preco_oferta, input.preco_clube ?? 0, img?.imagem_id ?? null, !img]
+  )
+}
+
 export async function atualizarLoja(changes: Partial<Omit<Loja, 'loja_id'>>): Promise<Loja> {
   const loja = await queryOne<Loja>('SELECT * FROM lojas LIMIT 1')
   if (!loja) throw new Error('Loja não encontrada')
