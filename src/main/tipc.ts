@@ -16,7 +16,10 @@ import {
 import {
   carregarJornal,
   atualizarItem,
-  listarRascunhos
+  listarRascunhos,
+  listarJornais,
+  buscarProdutoNoHistorico,
+  dashboardStats
 } from './servicos/jornais'
 import { importarPlanilha } from './import/flow'
 
@@ -25,6 +28,10 @@ const t = tipc.create()
 export const router = {
   'app.health': t.procedure.action(async () => {
     return { status: 'ok' as const, timestamp: new Date().toISOString() }
+  }),
+
+  'dashboard.stats': t.procedure.action(async () => {
+    return dashboardStats()
   }),
 
   'produtos.listar': t.procedure.action(async () => {
@@ -128,6 +135,22 @@ export const router = {
   'jornal.listar_rascunhos': t.procedure.action(async () => {
     return listarRascunhos()
   }),
+
+  'historico.listar': t.procedure.action(async () => {
+    return listarJornais()
+  }),
+
+  'historico.detalhe': t.procedure
+    .input<{ jornal_id: number }>()
+    .action(async ({ input }) => {
+      return carregarJornal(input.jornal_id)
+    }),
+
+  'historico.buscar_produto': t.procedure
+    .input<{ produto_id: number }>()
+    .action(async ({ input }) => {
+      return buscarProdutoNoHistorico(input.produto_id)
+    }),
 
   'export.gerar': t.procedure
     .input<{ jornal_id: number }>()

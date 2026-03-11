@@ -20,3 +20,19 @@ export async function importarPlanilha(data: {
 }) {
   return client['import.planilha'](data)
 }
+
+export async function listarJornais() {
+  return client['historico.listar']()
+}
+
+export async function historicoDetalhe(jornal_id: number) {
+  return client['historico.detalhe']({ jornal_id })
+}
+
+export async function buscarProdutoNoHistorico(produto_id: number) {
+  return client['historico.buscar_produto']({ produto_id })
+}
+
+export async function getDashboardStats() {
+  return client['dashboard.stats']()
+}

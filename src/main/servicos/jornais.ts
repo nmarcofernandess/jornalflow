@@ -112,3 +112,61 @@ export async function listarRascunhos(): Promise<Jornal[]> {
     "SELECT * FROM jornais WHERE status = 'rascunho' ORDER BY criado_em DESC"
   )
 }
+
+export async function listarJornais(): Promise<Jornal[]> {
+  return queryAll<Jornal>('SELECT * FROM jornais ORDER BY criado_em DESC')
+}
+
+export async function dashboardStats(): Promise<{
+  total_produtos: number
+  produtos_com_imagem: number
+  total_jornais: number
+  ultimo_exportado: Jornal | null
+  rascunho_atual: Jornal | null
+}> {
+  const total_produtos = await queryOne<{ count: number }>(
+    'SELECT COUNT(*)::int as count FROM produtos WHERE ativo = true'
+  )
+
+  const produtos_com_imagem = await queryOne<{ count: number }>(
+    'SELECT COUNT(DISTINCT pi.produto_id)::int as count FROM produto_imagens pi JOIN produtos p ON p.produto_id = pi.produto_id WHERE p.ativo = true'
+  )
+
+  const total_jornais = await queryOne<{ count: number }>(
+    'SELECT COUNT(*)::int as count FROM jornais'
+  )
+
+  const ultimo_exportado = await queryOne<Jornal>(
+    "SELECT * FROM jornais WHERE status = 'exportado' ORDER BY atualizado_em DESC LIMIT 1"
+  )
+
+  const rascunho_atual = await queryOne<Jornal>(
+    "SELECT * FROM jornais WHERE status = 'rascunho' ORDER BY criado_em DESC LIMIT 1"
+  )
+
+  return {
+    total_produtos: total_produtos?.count ?? 0,
+    produtos_com_imagem: produtos_com_imagem?.count ?? 0,
+    total_jornais: total_jornais?.count ?? 0,
+    ultimo_exportado: ultimo_exportado ?? null,
+    rascunho_atual: rascunho_atual ?? null
+  }
+}
+
+export async function buscarProdutoNoHistorico(produto_id: number): Promise<Array<{
+  jornal_id: number
+  titulo: string | null
+  data_inicio: string
+  data_fim: string
+  preco_oferta: number
+  preco_clube: number
+}>> {
+  return queryAll(
+    `SELECT j.jornal_id, j.titulo, j.data_inicio, j.data_fim, ji.preco_oferta, ji.preco_clube
+     FROM jornal_itens ji
+     JOIN jornais j ON j.jornal_id = ji.jornal_id
+     WHERE ji.produto_id = $1
+     ORDER BY j.data_inicio DESC`,
+    [produto_id]
+  )
+}
