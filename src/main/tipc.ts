@@ -127,7 +127,14 @@ export const router = {
 
   'jornal.listar_rascunhos': t.procedure.action(async () => {
     return listarRascunhos()
-  })
+  }),
+
+  'export.gerar': t.procedure
+    .input<{ jornal_id: number }>()
+    .action(async ({ input }) => {
+      const { exportAll } = await import('./export/cuts')
+      return exportAll(input.jornal_id)
+    })
 }
 
 export type Router = typeof router
