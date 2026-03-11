@@ -24,7 +24,7 @@ JornalFlow — um app desktop (Electron) que:
 
 | Layer | Tecnologia |
 |-------|-----------|
-| Shell | Electron 34 |
+| Shell | Electron 39 |
 | Build | electron-vite |
 | IPC | @egoist/tipc (type-safe) |
 | Frontend | React 19 + React Router |
