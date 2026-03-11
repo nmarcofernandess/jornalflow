@@ -142,7 +142,27 @@ export const router = {
       const { shell } = await import('electron')
       await shell.openPath(input.caminho)
       return { ok: true }
-    })
+    }),
+
+  'ia.chat': t.procedure
+    .input<{ messages: Array<{ role: 'user' | 'assistant'; content: string }> }>()
+    .action(async ({ input }) => {
+      const { chat } = await import('./ia/cliente')
+      return { response: await chat(input.messages) }
+    }),
+
+  'ia.set_api_key': t.procedure
+    .input<{ key: string }>()
+    .action(async ({ input }) => {
+      const { setApiKey } = await import('./ia/config')
+      setApiKey(input.key)
+      return { ok: true }
+    }),
+
+  'ia.get_api_key': t.procedure.action(async () => {
+    const { getApiKey } = await import('./ia/config')
+    return { key: getApiKey() }
+  })
 }
 
 export type Router = typeof router

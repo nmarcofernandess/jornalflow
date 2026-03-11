@@ -14,7 +14,7 @@ export const iaTools = {
   buscar_produtos: tool({
     description:
       'Busca produtos no catálogo por nome, código ou categoria. Use para responder perguntas sobre o que tem no banco.',
-    parameters: z.object({
+    inputSchema: z.object({
       termo: z.string().describe('Termo de busca: nome do produto, código ou categoria')
     }),
     execute: async ({ termo }) => {
@@ -37,7 +37,7 @@ export const iaTools = {
 
   ver_produto: tool({
     description: 'Mostra detalhes de um produto específico, incluindo imagens cadastradas.',
-    parameters: z.object({
+    inputSchema: z.object({
       produto_id: z.number().describe('ID do produto')
     }),
     execute: async ({ produto_id }) => {
@@ -62,7 +62,7 @@ export const iaTools = {
   cadastrar_produto: tool({
     description:
       'Cadastra um novo produto no banco. Use quando a usuária pedir para adicionar um produto.',
-    parameters: z.object({
+    inputSchema: z.object({
       codigo: z.string().describe('Código do produto (ex: "515", "6002")'),
       nome: z.string().describe('Nome completo do produto (ex: "CERVEJA CRYSTAL 350ML")'),
       unidade: z.string().describe('Unidade: KG, UN, PCT, LT, etc.'),
@@ -89,7 +89,7 @@ export const iaTools = {
   atualizar_produto: tool({
     description:
       'Atualiza dados de um produto existente (nome, unidade, categoria, nome do card).',
-    parameters: z.object({
+    inputSchema: z.object({
       produto_id: z.number().describe('ID do produto a atualizar'),
       nome: z.string().optional().describe('Novo nome'),
       nome_card: z.string().optional().describe('Novo nome para o card'),
@@ -115,7 +115,7 @@ export const iaTools = {
 
   listar_imagens: tool({
     description: 'Lista todas as imagens cadastradas de um produto.',
-    parameters: z.object({
+    inputSchema: z.object({
       produto_id: z.number().describe('ID do produto')
     }),
     execute: async ({ produto_id }) => {
@@ -134,7 +134,7 @@ export const iaTools = {
 
   definir_imagem_default: tool({
     description: 'Define qual imagem é a padrão de um produto.',
-    parameters: z.object({
+    inputSchema: z.object({
       imagem_id: z.number().describe('ID da imagem a definir como padrão')
     }),
     execute: async ({ imagem_id }) => {
@@ -149,7 +149,7 @@ export const iaTools = {
 
   buscar_jornal_atual: tool({
     description: 'Busca o jornal em rascunho atual (se existir).',
-    parameters: z.object({}),
+    inputSchema: z.object({}),
     execute: async () => {
       const jornal = await queryOne<any>(
         "SELECT * FROM jornais WHERE status = 'rascunho' ORDER BY criado_em DESC LIMIT 1"
@@ -178,7 +178,7 @@ export const iaTools = {
 
   status_importacao: tool({
     description: 'Mostra resumo da última importação de planilha.',
-    parameters: z.object({}),
+    inputSchema: z.object({}),
     execute: async () => {
       const imp = await queryOne<any>(
         'SELECT * FROM importacoes ORDER BY importacao_id DESC LIMIT 1'
@@ -199,7 +199,7 @@ export const iaTools = {
   trocar_item: tool({
     description:
       'Troca o produto de um item do jornal. Recalcula a imagem padrão do novo produto.',
-    parameters: z.object({
+    inputSchema: z.object({
       item_id: z.number().describe('ID do item no jornal'),
       novo_produto_id: z.number().describe('ID do novo produto')
     }),
@@ -239,7 +239,7 @@ export const iaTools = {
   atualizar_item: tool({
     description:
       'Atualiza preço, preço clube ou imagem de um item do jornal.',
-    parameters: z.object({
+    inputSchema: z.object({
       item_id: z.number().describe('ID do item no jornal'),
       preco_oferta: z.number().optional().describe('Novo preço de oferta'),
       preco_clube: z.number().optional().describe('Novo preço clube'),
@@ -269,7 +269,7 @@ export const iaTools = {
   buscar_historico: tool({
     description:
       'Lista jornais passados em ordem decrescente de data. Use para consultar edições anteriores.',
-    parameters: z.object({
+    inputSchema: z.object({
       limite: z.number().optional().describe('Quantidade máxima de resultados (padrão: 10)')
     }),
     execute: async ({ limite }) => {
@@ -297,7 +297,7 @@ export const iaTools = {
   comparar_precos: tool({
     description:
       'Compara o preço de um produto ao longo de diferentes edições do jornal.',
-    parameters: z.object({
+    inputSchema: z.object({
       produto_id: z.number().describe('ID do produto para comparar preços')
     }),
     execute: async ({ produto_id }) => {
@@ -337,7 +337,7 @@ export const iaTools = {
   listar_secoes: tool({
     description:
       'Lista as seções do jornal em rascunho atual, com contagem de itens em cada uma.',
-    parameters: z.object({}),
+    inputSchema: z.object({}),
     execute: async () => {
       const jornal = await queryOne<any>(
         "SELECT * FROM jornais WHERE status = 'rascunho' ORDER BY criado_em DESC LIMIT 1"
@@ -379,7 +379,7 @@ export const iaTools = {
   adicionar_secao: tool({
     description:
       'Adiciona uma seção customizada a uma página do jornal.',
-    parameters: z.object({
+    inputSchema: z.object({
       jornal_id: z.number().describe('ID do jornal'),
       pagina_numero: z.number().describe('Número da página'),
       nome: z.string().describe('Nome da nova seção'),
@@ -426,7 +426,7 @@ export const iaTools = {
   stats_banco: tool({
     description:
       'Mostra estatísticas gerais do banco: total de produtos, imagens, jornais, etc.',
-    parameters: z.object({}),
+    inputSchema: z.object({}),
     execute: async () => {
       const [produtos, comImagens, totalImagens, totalJornais, rascunhos] = await Promise.all([
         queryOne<{ count: number }>('SELECT COUNT(*)::int as count FROM produtos WHERE ativo = true'),

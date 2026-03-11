@@ -1,17 +1,18 @@
 import { useState, useRef, useEffect } from 'react'
 import { useIaStore } from '@renderer/store/iaStore'
 import { enviarMensagem } from '@renderer/servicos/ia'
-import { Send, Bot, User, Loader2, Trash2 } from 'lucide-react'
-import { Button } from '@renderer/components/ui/button'
+import { X, Send, Bot, User, Loader2 } from 'lucide-react'
 
-export default function IaPagina() {
-  const { messages, loading, addMessage, setLoading, clearMessages } = useIaStore()
+export function IaChatPanel() {
+  const { messages, open, loading, toggleOpen, addMessage, setLoading } = useIaStore()
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  if (!open) return null
 
   async function handleSend() {
     if (!input.trim() || loading) return
@@ -36,53 +37,47 @@ export default function IaPagina() {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="w-96 border-l bg-background flex flex-col h-full flex-shrink-0">
       {/* Header */}
-      <div className="p-4 border-b flex items-center justify-between">
+      <div className="p-3 border-b flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Bot className="h-5 w-5" />
-          <h1 className="text-lg font-semibold">Assistente IA</h1>
+          <Bot className="h-4 w-4" />
+          <span className="font-medium text-sm">Assistente IA</span>
         </div>
-        {messages.length > 0 && (
-          <Button size="sm" variant="ghost" onClick={clearMessages}>
-            <Trash2 className="h-4 w-4" />
-            Limpar
-          </Button>
-        )}
+        <button onClick={toggleOpen} className="p-1 hover:bg-muted rounded">
+          <X className="h-4 w-4" />
+        </button>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-auto p-4 space-y-4">
+      <div className="flex-1 overflow-auto p-3 space-y-3">
         {messages.length === 0 && (
-          <div className="text-center text-muted-foreground mt-16">
-            <Bot className="h-12 w-12 mx-auto mb-3 opacity-40" />
-            <p className="text-sm">Pergunte sobre produtos, jornal ou catalogo</p>
-            <p className="text-xs mt-1 text-muted-foreground/60">
-              A IA tem acesso ao banco de dados e pode consultar, cadastrar e atualizar informacoes
-            </p>
+          <div className="text-center text-muted-foreground text-sm mt-8">
+            <Bot className="h-8 w-8 mx-auto mb-2 opacity-50" />
+            <p>Pergunte sobre produtos, jornal ou catalogo</p>
           </div>
         )}
         {messages.map((msg, i) => (
-          <div key={i} className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : ''}`}>
+          <div key={i} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : ''}`}>
             {msg.role === 'assistant' && (
-              <Bot className="h-6 w-6 mt-0.5 text-muted-foreground shrink-0" />
+              <Bot className="h-5 w-5 mt-0.5 text-muted-foreground shrink-0" />
             )}
             <div
-              className={`rounded-lg px-4 py-3 text-sm max-w-[70%] ${
+              className={`rounded-lg px-3 py-2 text-sm max-w-[85%] ${
                 msg.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'
               }`}
             >
               <p className="whitespace-pre-wrap">{msg.content}</p>
             </div>
             {msg.role === 'user' && (
-              <User className="h-6 w-6 mt-0.5 text-muted-foreground shrink-0" />
+              <User className="h-5 w-5 mt-0.5 text-muted-foreground shrink-0" />
             )}
           </div>
         ))}
         {loading && (
-          <div className="flex gap-3">
-            <Bot className="h-6 w-6 mt-0.5 text-muted-foreground shrink-0" />
-            <div className="bg-muted rounded-lg px-4 py-3">
+          <div className="flex gap-2">
+            <Bot className="h-5 w-5 mt-0.5 text-muted-foreground shrink-0" />
+            <div className="bg-muted rounded-lg px-3 py-2">
               <Loader2 className="h-4 w-4 animate-spin" />
             </div>
           </div>
@@ -91,8 +86,8 @@ export default function IaPagina() {
       </div>
 
       {/* Input */}
-      <div className="p-4 border-t">
-        <div className="flex gap-2 max-w-3xl mx-auto">
+      <div className="p-3 border-t">
+        <div className="flex gap-2">
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}

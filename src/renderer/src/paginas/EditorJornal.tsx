@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useEditorStore } from '@renderer/store/editorStore'
+import { useIaStore } from '@renderer/store/iaStore'
 import { carregarJornal } from '@renderer/servicos/jornais'
 import { JornalPreview } from '@renderer/componentes/jornal/JornalPreview'
 import { PainelImport } from '@renderer/componentes/editor/PainelImport'
@@ -8,9 +9,10 @@ import { PainelSecoes } from '@renderer/componentes/editor/PainelSecoes'
 import { PainelItem } from '@renderer/componentes/editor/PainelItem'
 import { PainelAlertas } from '@renderer/componentes/editor/PainelAlertas'
 import { ExportDialog } from '@renderer/componentes/editor/ExportDialog'
+import { IaChatPanel } from '@renderer/componentes/ia/IaChatPanel'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Button } from '@renderer/components/ui/button'
-import { Download } from 'lucide-react'
+import { Download, Bot } from 'lucide-react'
 
 type EditorTab = 'import' | 'secoes' | 'item' | 'alertas'
 
@@ -24,6 +26,7 @@ const tabLabels: Record<EditorTab, string> = {
 export default function EditorJornal() {
   const { jornal_id } = useParams()
   const store = useEditorStore()
+  const iaStore = useIaStore()
   const [tab, setTab] = useState<EditorTab>('import')
   const [exportOpen, setExportOpen] = useState(false)
 
@@ -91,7 +94,15 @@ export default function EditorJornal() {
       {/* Right Panel — Preview */}
       <div className="flex-1 overflow-auto bg-gray-100 flex flex-col">
         {store.jornal && (
-          <div className="flex items-center justify-end px-4 py-2 border-b bg-background flex-shrink-0">
+          <div className="flex items-center justify-end gap-2 px-4 py-2 border-b bg-background flex-shrink-0">
+            <Button
+              size="sm"
+              variant={iaStore.open ? 'default' : 'outline'}
+              onClick={() => iaStore.toggleOpen()}
+            >
+              <Bot className="h-4 w-4" />
+              IA
+            </Button>
             <Button
               size="sm"
               variant="outline"
@@ -138,6 +149,9 @@ export default function EditorJornal() {
         )}
         </div>
       </div>
+
+      {/* IA Chat Panel */}
+      <IaChatPanel />
 
       {store.jornal && (
         <ExportDialog
