@@ -19,7 +19,9 @@ import {
   listarRascunhos,
   listarJornais,
   buscarProdutoNoHistorico,
-  dashboardStats
+  dashboardStats,
+  getLoja,
+  atualizarLoja
 } from './servicos/jornais'
 import { importarPlanilha } from './import/flow'
 
@@ -119,6 +121,13 @@ export const router = {
       return importarPlanilha(input)
     }),
 
+  'import.batch_imagens': t.procedure
+    .input<{ dir_path: string }>()
+    .action(async ({ input }) => {
+      const { importarImagensBatch } = await import('./import/batch-images')
+      return importarImagensBatch(input.dir_path)
+    }),
+
   'jornal.carregar': t.procedure
     .input<{ jornal_id: number }>()
     .action(async ({ input }) => {
@@ -166,6 +175,28 @@ export const router = {
       await shell.openPath(input.caminho)
       return { ok: true }
     }),
+
+  'config.get_loja': t.procedure.action(async () => {
+    return getLoja()
+  }),
+
+  'config.atualizar_loja': t.procedure
+    .input<{ changes: Record<string, unknown> }>()
+    .action(async ({ input }) => {
+      return atualizarLoja(input.changes)
+    }),
+
+  'config.db_stats': t.procedure.action(async () => {
+    const { queryOne } = await import('./db/query')
+    const produtos = await queryOne<{ count: number }>('SELECT COUNT(*)::int as count FROM produtos')
+    const imagens = await queryOne<{ count: number }>('SELECT COUNT(*)::int as count FROM produto_imagens')
+    const jornais = await queryOne<{ count: number }>('SELECT COUNT(*)::int as count FROM jornais')
+    return {
+      produtos: produtos?.count ?? 0,
+      imagens: imagens?.count ?? 0,
+      jornais: jornais?.count ?? 0
+    }
+  }),
 
   'ia.chat': t.procedure
     .input<{ messages: Array<{ role: 'user' | 'assistant'; content: string }> }>()

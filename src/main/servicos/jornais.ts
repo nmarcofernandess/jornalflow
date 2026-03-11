@@ -170,3 +170,33 @@ export async function buscarProdutoNoHistorico(produto_id: number): Promise<Arra
     [produto_id]
   )
 }
+
+export async function getLoja(): Promise<Loja | null> {
+  return queryOne<Loja>('SELECT * FROM lojas LIMIT 1')
+}
+
+export async function atualizarLoja(changes: Partial<Omit<Loja, 'loja_id'>>): Promise<Loja> {
+  const loja = await queryOne<Loja>('SELECT * FROM lojas LIMIT 1')
+  if (!loja) throw new Error('Loja não encontrada')
+
+  const allowed = new Set(['nome', 'endereco', 'telefone', 'horario_func', 'logo_path'])
+  const sets: string[] = []
+  const params: unknown[] = []
+  let i = 1
+
+  for (const [key, value] of Object.entries(changes)) {
+    if (!allowed.has(key)) continue
+    sets.push(`${key} = $${i++}`)
+    params.push(value)
+  }
+
+  if (sets.length > 0) {
+    params.push(loja.loja_id)
+    await execute(
+      `UPDATE lojas SET ${sets.join(', ')} WHERE loja_id = $${i}`,
+      params
+    )
+  }
+
+  return (await queryOne<Loja>('SELECT * FROM lojas LIMIT 1'))!
+}
