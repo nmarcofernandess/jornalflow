@@ -1,4 +1,6 @@
 import { PGlite } from '@electric-sql/pglite'
+import { vector } from '@electric-sql/pglite/vector'
+import { pg_trgm } from '@electric-sql/pglite/contrib/pg_trgm'
 import fs from 'fs/promises'
 import path from 'path'
 
@@ -24,6 +26,7 @@ export async function ensureDataDirs(): Promise<void> {
   const base = getDataDir()
   const dirs = [
     path.join(base, 'images', 'products'),
+    path.join(base, 'images', 'playground'),
     path.join(base, 'images', 'assets', 'backgrounds'),
     path.join(base, 'images', 'assets', 'headers'),
     path.join(base, 'images', 'assets', 'banners'),
@@ -38,9 +41,15 @@ export async function ensureDataDirs(): Promise<void> {
 
 export async function getDb(): Promise<PGlite> {
   if (db) return db
-  // In test/dev: in-memory. In prod: use app.getPath('userData') + '/pglite'
+  // In test/dev: in-memory (no dataDir). In prod: use PGLITE_DATA_DIR env var.
   const dataDir = process.env.PGLITE_DATA_DIR || undefined
-  db = new PGlite(dataDir)
+  db = await PGlite.create({
+    dataDir,
+    extensions: { vector, pg_trgm }
+  })
+  // Enable extensions — must run before any migration that uses vector() or gin_trgm_ops
+  await db.exec('CREATE EXTENSION IF NOT EXISTS vector')
+  await db.exec('CREATE EXTENSION IF NOT EXISTS pg_trgm')
   return db
 }
 

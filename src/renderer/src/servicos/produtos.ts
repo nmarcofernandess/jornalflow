@@ -62,3 +62,25 @@ export async function definirDefault(imagem_id: number): Promise<{ ok: boolean }
 export async function removerImagem(imagem_id: number): Promise<{ ok: boolean }> {
   return client['imagens.remover']({ imagem_id })
 }
+
+export async function listarOrfas(): Promise<ProdutoImagem[]> {
+  return client['imagens.orfas']()
+}
+
+export async function atribuirAProduto(
+  imagem_id: number,
+  produto_id: number
+): Promise<ProdutoImagem> {
+  return client['imagens.atribuir']({ imagem_id, produto_id })
+}
+
+export async function listarTodasImagens(): Promise<
+  (ProdutoImagem & { produto_nome?: string; produto_codigo?: string })[]
+> {
+  return client['imagens.todas']()
+}
+
+export async function mostrarNoFinder(caminho: string): Promise<void> {
+  await client['shell.mostrar_no_finder']({ caminho })
+}
+

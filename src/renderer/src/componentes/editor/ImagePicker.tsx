@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { listarImagens } from '@renderer/servicos/produtos'
+import { useDataDir, imageUrl } from '@renderer/lib/image-url'
 import {
   Dialog,
   DialogContent,
@@ -26,6 +27,7 @@ export function ImagePicker({
   onClose,
   onSelect
 }: ImagePickerProps) {
+  const dataDir = useDataDir()
   const [imagens, setImagens] = useState<ProdutoImagem[]>([])
   const [loading, setLoading] = useState(false)
 
@@ -97,7 +99,7 @@ export function ImagePicker({
                   }`}
                 >
                   <img
-                    src={`file://${img.arquivo_path}`}
+                    src={imageUrl(dataDir, img.arquivo_path)}
                     alt={img.variacao || 'Imagem do produto'}
                     className="w-full h-full object-cover"
                   />

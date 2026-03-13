@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { getDb } from '../../src/main/db/database'
+import { getDb, getDataDir } from '../../src/main/db/database'
 import { applyMigrations } from '../../src/main/db/schema'
 import { seed } from '../../src/main/db/seed'
 import { criarProduto } from '../../src/main/servicos/produtos'
@@ -15,6 +15,9 @@ describe('batch-images', () => {
     await getDb()
     await applyMigrations()
     await seed()
+
+    // Ensure playground dir exists for tests
+    await fs.mkdir(path.join(getDataDir(), 'images', 'playground'), { recursive: true })
 
     // Create temp directory with test images
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'jf-batch-'))
@@ -32,12 +35,12 @@ describe('batch-images', () => {
 
     expect(result.total_files).toBe(1)
     expect(result.matched).toBe(1)
-    expect(result.unmatched).toBe(0)
+    expect(result.playground).toBe(0)
     expect(result.details[0].status).toBe('matched')
   })
 
-  it('reports unmatched files', async () => {
-    // No products exist for this code
+  it('sends unmatched files to playground', async () => {
+    // No products exist for this code — goes to playground
     const imgPath = path.join(tmpDir, '99999.png')
     await fs.writeFile(imgPath, 'fake-image-data')
 
@@ -45,8 +48,8 @@ describe('batch-images', () => {
 
     expect(result.total_files).toBe(1)
     expect(result.matched).toBe(0)
-    expect(result.unmatched).toBe(1)
-    expect(result.details[0].status).toBe('unmatched')
+    expect(result.playground).toBe(1)
+    expect(result.details[0].status).toBe('playground')
   })
 
   it('scans subdirectories recursively', async () => {

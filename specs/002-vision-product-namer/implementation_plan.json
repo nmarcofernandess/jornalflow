@@ -1,0 +1,185 @@
+{
+  "status": "complete",
+  "plan": {
+    "feature": "Vision Product Namer",
+    "workflow_type": "feature",
+    "phases": [
+      {
+        "id": "phase-1-types",
+        "name": "Tipos Compartilhados",
+        "description": "Adicionar interfaces AnaliseVisionProduto e VisionProgressEvent em shared/types.ts para uso por ambos os processos",
+        "depends_on": [],
+        "subtasks": [
+          {
+            "id": "subtask-1-1",
+            "description": "Adicionar interface AnaliseVisionProduto {nome_sugerido, nome_card, marca, peso, categoria, confianca} e VisionProgressEvent {current, total, filename, produto_id?, resultado?: AnaliseVisionProduto, erro?: string} em src/shared/types.ts. Adicionar tambem VisionBatchSummary {total, sucesso, falhas, resultados: Array<{produto_id, imagem_id, filename, resultado?: AnaliseVisionProduto, erro?: string}>} para o retorno do batch.",
+            "files_to_modify": ["src/shared/types.ts"],
+            "files_to_create": [],
+            "patterns_from": ["src/shared/types.ts"],
+            "verification": {
+              "type": "typecheck",
+              "command": "npx tsc --noEmit",
+              "expected": "No errors"
+            },
+            "status": "pending"
+          }
+        ]
+      },
+      {
+        "id": "phase-2-core",
+        "name": "Core Vision Analysis",
+        "description": "Criar modulo de analise de imagem individual — funcao pura que recebe filePath e config, retorna AnaliseVisionProduto",
+        "depends_on": ["phase-1-types"],
+        "subtasks": [
+          {
+            "id": "subtask-2-1",
+            "description": "Criar src/main/ia/vision.ts com funcao analisarProdutoImagem(filePath: string, createModel: (m: string) => LanguageModel, modelo: string): Promise<AnaliseVisionProduto>. Portar padrao do InstaFlow vision.ts: (1) readFile do filePath, (2) base64 encode, (3) detectar mimeType por extensao, (4) generateText() com messages=[{role:'user', content:[{type:'image', image:'data:mime;base64,...'}, {type:'text', text:VISION_PROMPT}]}] e maxTokens:1000, (5) limpar response com .replace(/```json\\n?/g,'').replace(/```\\n?/g,'').trim(), (6) JSON.parse com fallback a objeto parcial com confianca:0. O VISION_PROMPT deve ser especifico para dominio supermercado: instruir a IA a ler rotulo/embalagem, identificar marca/nome/peso/volume/unidade, gerar nome_sugerido padrao supermercado (ex: 'CERVEJA CRYSTAL LATA 350ML'), nome_card curto (ex: 'CRYSTAL 350ML'), sugerir categoria, retornar confianca 0-100. Aceitar apenas createModel e modelo como params (NAO importar providers diretamente). Validar cada campo do parse com typeof checks (mesmo padrao do InstaFlow). Export tambem a constante VISION_PROMPT para teste.",
+            "files_to_modify": [],
+            "files_to_create": ["src/main/ia/vision.ts"],
+            "patterns_from": ["~/instaflow/src/main/ia/vision.ts", "src/main/ia/config.ts"],
+            "verification": {
+              "type": "typecheck",
+              "command": "npx tsc --noEmit",
+              "expected": "No errors"
+            },
+            "status": "pending"
+          }
+        ]
+      },
+      {
+        "id": "phase-3-batch",
+        "name": "Batch Vision Processor",
+        "description": "Criar processador batch que itera produtos com imagens sequencialmente, emitindo progresso via broadcastToRenderer",
+        "depends_on": ["phase-2-core"],
+        "subtasks": [
+          {
+            "id": "subtask-3-1",
+            "description": "Criar src/main/ia/batch-vision.ts com funcao analisarBatch(options: {produto_ids?: number[], limite?: number, createModel, modelo}): Promise<VisionBatchSummary>. Logica: (1) Se produto_ids fornecido, buscar esses produtos + sua imagem default. Se nao, buscar todos produtos com imagem (SQL JOIN produtos p INNER JOIN produto_imagens pi ON pi.produto_id = p.produto_id WHERE pi.is_default = true, limitado por 'limite' param, default 30). (2) Resolver caminho absoluto de cada imagem com getDataDir() + arquivo_path (se relativo). (3) Loop sequencial com for-of: para cada item, try { chamar analisarProdutoImagem() }, broadcastToRenderer('vision:progress', {current, total, filename, produto_id, resultado}) a cada passo. (4) Em caso de erro por item, catch e continuar com proximo, emitindo progress com erro. (5) Delay de 200ms entre chamadas (await new Promise(r => setTimeout(r, 200))). (6) Retornar VisionBatchSummary com totais e array de resultados. Importar broadcastToRenderer de '../ia/cliente', getDataDir de '../db/database', queryAll de '../db/query', analisarProdutoImagem de './vision'. Usar path.isAbsolute() para decidir se precisa resolver path.",
+            "files_to_modify": [],
+            "files_to_create": ["src/main/ia/batch-vision.ts"],
+            "patterns_from": ["src/main/import/batch-images.ts", "src/main/ia/cliente.ts"],
+            "verification": {
+              "type": "typecheck",
+              "command": "npx tsc --noEmit",
+              "expected": "No errors"
+            },
+            "status": "pending"
+          }
+        ]
+      },
+      {
+        "id": "phase-4-ipc",
+        "name": "IPC Handlers",
+        "description": "Adicionar handlers no router tipc para analise individual, batch e listagem de produtos com imagem",
+        "depends_on": ["phase-3-batch"],
+        "subtasks": [
+          {
+            "id": "subtask-4-1",
+            "description": "Adicionar 3 IPC handlers em src/main/tipc.ts: (1) 'vision.analisar' — input: {imagem_id: number}. Busca imagem no DB via queryOne('SELECT * FROM produto_imagens WHERE imagem_id = $1', [imagem_id]), resolve path absoluto com getDataDir(), carrega config IA, chama buildModelFactory, chama analisarProdutoImagem(). Retorna AnaliseVisionProduto. Usar dynamic import para vision.ts. Guard: se provider e openrouter e modelo nao comeca com 'google/', retornar erro descritivo. (2) 'vision.batch' — input: {produto_ids?: number[], limite?: number}. Carrega config IA, buildModelFactory, chama analisarBatch() com createModel e modelo. Retorna VisionBatchSummary. Dynamic import para batch-vision.ts. (3) 'vision.listar_com_imagem' — input: void. SQL: SELECT p.produto_id, p.codigo, p.nome, p.nome_card, p.categoria, pi.imagem_id, pi.arquivo_path FROM produtos p INNER JOIN produto_imagens pi ON pi.produto_id = p.produto_id AND pi.is_default = true ORDER BY p.nome. Retorna array com produto+imagem info para a tela de revisao. Todos handlers com try/catch graceful (nunca crash).",
+            "files_to_modify": ["src/main/tipc.ts"],
+            "files_to_create": [],
+            "patterns_from": ["src/main/tipc.ts"],
+            "verification": {
+              "type": "typecheck",
+              "command": "npx tsc --noEmit",
+              "expected": "No errors"
+            },
+            "status": "pending"
+          }
+        ]
+      },
+      {
+        "id": "phase-5-tool",
+        "name": "IA Tool — Chat Integration",
+        "description": "Adicionar tool analisar_imagem_produto ao iaTools para uso no chat IA com padrao 3-status",
+        "depends_on": ["phase-2-core"],
+        "subtasks": [
+          {
+            "id": "subtask-5-1",
+            "description": "Adicionar tool 'analisar_imagem_produto' no objeto iaTools em src/main/ia/tools.ts. Schema: z.object({ imagem_id: z.number().describe('ID da imagem do produto para analisar via Vision AI') }). Execute: (1) buscar ProdutoImagem no DB via queryOne, (2) resolver path absoluto com getDataDir(), (3) carregar config IA via queryOne('SELECT * FROM configuracao_ia LIMIT 1'), (4) buildModelFactory(config), (5) chamar analisarProdutoImagem(), (6) retornar toolResult('ok', 'Analise concluida com confianca X%', resultado, {tool_name: 'analisar_imagem_produto', elapsed_ms, count: 1}). Tratar erros: se imagem nao encontrada retornar toolResult('vazio', ...), se API falha retornar toolResult('erro', ...). Importar analisarProdutoImagem de './vision', buildModelFactory de './config', getDataDir de '../db/database'. Description: 'Analisa uma imagem de produto usando Vision AI para sugerir nome, marca, peso e categoria. Use quando o usuario pedir para analisar/identificar um produto pela foto.'",
+            "files_to_modify": ["src/main/ia/tools.ts"],
+            "files_to_create": [],
+            "patterns_from": ["src/main/ia/tools.ts"],
+            "verification": {
+              "type": "typecheck",
+              "command": "npx tsc --noEmit",
+              "expected": "No errors"
+            },
+            "status": "pending"
+          }
+        ]
+      },
+      {
+        "id": "phase-6-frontend-service",
+        "name": "Frontend Service Wrapper",
+        "description": "Criar servico thin wrapper para chamadas IPC de vision no renderer",
+        "depends_on": ["phase-4-ipc"],
+        "subtasks": [
+          {
+            "id": "subtask-6-1",
+            "description": "Criar src/renderer/src/servicos/vision.ts como thin IPC wrapper. Funcoes: (1) analisarImagem(imagem_id: number): Promise<AnaliseVisionProduto> — chama client['vision.analisar']({imagem_id}). (2) analisarBatch(options?: {produto_ids?: number[], limite?: number}): Promise<VisionBatchSummary> — chama client['vision.batch'](options ?? {}). (3) listarProdutosComImagem(): Promise<ProdutoComImagem[]> — chama client['vision.listar_com_imagem'](). Definir type ProdutoComImagem = {produto_id, codigo, nome, nome_card, categoria, imagem_id, arquivo_path} localmente ou exportar de types.ts. Importar client de './client', tipos de '@shared/types'. Seguir mesmo padrao de src/renderer/src/servicos/produtos.ts.",
+            "files_to_modify": [],
+            "files_to_create": ["src/renderer/src/servicos/vision.ts"],
+            "patterns_from": ["src/renderer/src/servicos/produtos.ts"],
+            "verification": {
+              "type": "typecheck",
+              "command": "npx tsc --noEmit",
+              "expected": "No errors"
+            },
+            "status": "pending"
+          }
+        ]
+      },
+      {
+        "id": "phase-7-frontend-page",
+        "name": "Frontend — Tela de Revisao Vision",
+        "description": "Criar pagina VisionRevisaoPagina com grid de cards para revisar sugestoes da IA e botoes de acao",
+        "depends_on": ["phase-6-frontend-service"],
+        "subtasks": [
+          {
+            "id": "subtask-7-1",
+            "description": "Criar src/renderer/src/paginas/VisionRevisaoPagina.tsx — pagina principal da feature. Componentes/estado: (1) useState para lista de produtos com imagem (carregados via listarProdutosComImagem), (2) useState<Map<number, AnaliseVisionProduto>> para resultados de analise por produto_id, (3) useState para progresso batch {running, current, total}, (4) useEffect para carregar lista inicial e para ouvir eventos IPC 'vision:progress' via window.electron.ipcRenderer.on (com cleanup no return). UI: (a) Header com titulo 'Vision AI — Nomeador de Produtos', botao 'Analisar Todos' (dispara batch), botao 'Aceitar Todos > 80%'. (b) Barra de progresso visivel durante batch (current/total com porcentagem). (c) Grid de cards responsivo (grid-cols-1 md:grid-cols-2 lg:grid-cols-3). Cada card: thumbnail da imagem (usar protocolo jf-img://local + arquivo_path, ou src com imageUrl helper), nome atual do produto, sugestao IA (nome_sugerido + nome_card), badge de confianca (verde >80, amarelo >50, vermelho <50), 3 botoes: Aceitar (chama atualizarProduto com nome e nome_card sugeridos), Editar (abre inputs inline para ajustar antes de salvar), Rejeitar (remove da lista de pendentes). (d) Botao 'Aceitar Todos > 80%' itera resultados com confianca > 80 e chama atualizarProduto sequencialmente. Importar servicos de '../servicos/vision' e '../servicos/produtos' (atualizarProduto). Estilo com Tailwind (seguir padrao das outras paginas). Export default.",
+            "files_to_modify": [],
+            "files_to_create": ["src/renderer/src/paginas/VisionRevisaoPagina.tsx"],
+            "patterns_from": ["src/renderer/src/paginas/GaleriaImagens.tsx", "src/renderer/src/paginas/ProdutosLista.tsx"],
+            "verification": {
+              "type": "typecheck",
+              "command": "npx tsc --noEmit",
+              "expected": "No errors"
+            },
+            "status": "pending"
+          }
+        ]
+      },
+      {
+        "id": "phase-8-wiring",
+        "name": "Router e Navegacao",
+        "description": "Conectar a pagina de revisao ao router e adicionar item de navegacao na sidebar",
+        "depends_on": ["phase-7-frontend-page"],
+        "subtasks": [
+          {
+            "id": "subtask-8-1",
+            "description": "Adicionar rota '/vision' em src/renderer/src/App.tsx: importar VisionRevisaoPagina de '@renderer/paginas/VisionRevisaoPagina', adicionar <Route path='/vision' element={<VisionRevisaoPagina />} /> dentro do Routes. Adicionar item de navegacao em src/renderer/src/componentes/AppSidebar.tsx: importar Eye (ou ScanEye) de 'lucide-react', adicionar { to: '/vision', label: 'Vision AI', icon: ScanEye } no array navItems (posicionar entre 'Galeria' e 'Editor' ou apos 'Assistente IA').",
+            "files_to_modify": [
+              "src/renderer/src/App.tsx",
+              "src/renderer/src/componentes/AppSidebar.tsx"
+            ],
+            "files_to_create": [],
+            "patterns_from": ["src/renderer/src/App.tsx", "src/renderer/src/componentes/AppSidebar.tsx"],
+            "verification": {
+              "type": "manual",
+              "instructions": "Abrir app com npm run dev, clicar no item 'Vision AI' na sidebar, confirmar que a pagina carrega sem erros"
+            },
+            "status": "pending"
+          }
+        ]
+      }
+    ],
+    "summary": {
+      "total_phases": 8,
+      "total_subtasks": 8,
+      "estimated_complexity": "medium"
+    }
+  },
+  "completed_at": "2026-03-13T03:00:00Z"
+}

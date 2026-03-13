@@ -3,11 +3,13 @@ import { AppSidebar } from '@renderer/componentes/AppSidebar'
 import Dashboard from '@renderer/paginas/Dashboard'
 import ProdutosLista from '@renderer/paginas/ProdutosLista'
 import ProdutoDetalhe from '@renderer/paginas/ProdutoDetalhe'
+import GaleriaImagens from '@renderer/paginas/GaleriaImagens'
 import EditorJornal from '@renderer/paginas/EditorJornal'
 import HistoricoLista from '@renderer/paginas/HistoricoLista'
 import HistoricoDetalhe from '@renderer/paginas/HistoricoDetalhe'
 import IaPagina from '@renderer/paginas/IaPagina'
 import ConfiguracoesPagina from '@renderer/paginas/ConfiguracoesPagina'
+import VisionRevisaoPagina from '@renderer/paginas/VisionRevisaoPagina'
 
 export default function App() {
   return (
@@ -19,11 +21,13 @@ export default function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/produtos" element={<ProdutosLista />} />
             <Route path="/produtos/:produto_id" element={<ProdutoDetalhe />} />
+            <Route path="/galeria" element={<GaleriaImagens />} />
             <Route path="/editor" element={<EditorJornal />} />
             <Route path="/editor/:jornal_id" element={<EditorJornal />} />
             <Route path="/historico" element={<HistoricoLista />} />
             <Route path="/historico/:jornal_id" element={<HistoricoDetalhe />} />
             <Route path="/ia" element={<IaPagina />} />
+            <Route path="/vision" element={<VisionRevisaoPagina />} />
             <Route path="/configuracoes" element={<ConfiguracoesPagina />} />
           </Routes>
         </main>

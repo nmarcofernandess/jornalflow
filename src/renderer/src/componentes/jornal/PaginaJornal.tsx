@@ -1,6 +1,7 @@
 import { cn } from '@renderer/lib/utils'
 import type { JornalPagina } from '@shared/types'
 import { SecaoJornal, type SecaoJornalProps } from './SecaoJornal'
+import { useDataDir, imageUrl } from '@renderer/lib/image-url'
 
 interface PaginaJornalProps {
   pagina: JornalPagina
@@ -10,6 +11,7 @@ interface PaginaJornalProps {
 }
 
 export function PaginaJornal({ pagina, secoes, selected_item_id, onSelectItem }: PaginaJornalProps) {
+  const dataDir = useDataDir()
   const sorted_secoes = [...secoes].sort((a, b) => a.secao.posicao - b.secao.posicao)
   const is_dupla = pagina.layout === 'dupla'
 
@@ -18,7 +20,7 @@ export function PaginaJornal({ pagina, secoes, selected_item_id, onSelectItem }:
       {/* Page banner if present */}
       {pagina.banner_path && (
         <img
-          src={`file://${pagina.banner_path}`}
+          src={imageUrl(dataDir, pagina.banner_path)}
           alt={`Banner página ${pagina.numero}`}
           className="w-full h-auto object-cover"
         />

@@ -1,6 +1,7 @@
 import { cn } from '@renderer/lib/utils'
 import { Package } from 'lucide-react'
 import type { JornalItem, Produto } from '@shared/types'
+import { useDataDir, imageUrl } from '@renderer/lib/image-url'
 
 interface CardProdutoProps {
   item: JornalItem
@@ -22,6 +23,7 @@ function formatPrice(value: number): string {
 }
 
 export function CardProduto({ item, produto, imagem_path, status, selected, onClick }: CardProdutoProps) {
+  const dataDir = useDataDir()
   const displayName = produto.nome_card || produto.nome
   const unidade = item.unidade_display || produto.unidade
   const hasCompostas = item.imgs_compostas && item.imgs_compostas.length > 0
@@ -43,7 +45,7 @@ export function CardProduto({ item, produto, imagem_path, status, selected, onCl
             {item.imgs_compostas!.map((path, i) => (
               <img
                 key={i}
-                src={`file://${path}`}
+                src={imageUrl(dataDir, path)}
                 alt=""
                 className="flex-1 object-cover"
                 style={{ maxWidth: `${100 / item.imgs_compostas!.length}%` }}
@@ -52,7 +54,7 @@ export function CardProduto({ item, produto, imagem_path, status, selected, onCl
           </div>
         ) : imagem_path ? (
           <img
-            src={`file://${imagem_path}`}
+            src={imageUrl(dataDir, imagem_path)}
             alt={displayName}
             className="w-full h-full object-cover"
             style={{

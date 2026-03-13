@@ -1,0 +1,39 @@
+{
+  "task": "Vision Product Namer — analise de imagens de produtos via IA para sugerir nomes",
+  "mode": "standard",
+  "budget": "medium",
+  "spec_dir": "specs/002-vision-product-namer",
+  "current_phase": "complete",
+  "phases": {
+    "gathering": "complete",
+    "discovery": "complete",
+    "plan": "complete",
+    "code": "complete",
+    "build": "complete",
+    "qa": "complete",
+    "fix": "complete"
+  },
+  "subtasks": {
+    "subtask-1-1": "complete",
+    "subtask-2-1": "complete",
+    "subtask-3-1": "complete",
+    "subtask-4-1": "complete",
+    "subtask-5-1": "complete",
+    "subtask-6-1": "complete",
+    "subtask-7-1": "complete",
+    "subtask-8-1": "complete"
+  },
+  "code_progress": {
+    "total_subtasks": 8,
+    "completed": 8,
+    "current_subtask": null
+  },
+  "build_result": {
+    "typecheck": "pass (zero errors)",
+    "tests": "193/193 passing"
+  },
+  "qa_verdict": "approved",
+  "qa_iteration": 2,
+  "started_at": "2026-03-13T02:30:00",
+  "updated_at": "2026-03-13T08:15:00Z"
+}

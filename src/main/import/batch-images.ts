@@ -1,19 +1,19 @@
 import fs from 'fs/promises'
 import path from 'path'
 import { porCodigo } from '../servicos/produtos'
-import { adicionarImagem } from '../servicos/imagens'
+import { adicionarImagem, adicionarImagemPlayground } from '../servicos/imagens'
 
 const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif'])
 
 export interface BatchImageResult {
   total_files: number
   matched: number
-  unmatched: number
+  playground: number
   errors: number
   details: Array<{
     filename: string
     codigo: string | null
-    status: 'matched' | 'unmatched' | 'error'
+    status: 'matched' | 'playground' | 'error'
     message?: string
   }>
 }
@@ -22,10 +22,8 @@ export interface BatchImageResult {
 // Patterns: "12345.jpg", "12345_v1.jpg", "12345-frente.png", "COD12345.jpg"
 function extractCode(filename: string): string | null {
   const name = path.parse(filename).name
-  // Try exact numeric code
   const numericMatch = name.match(/^(\d{3,})/)
   if (numericMatch) return numericMatch[1]
-  // Try COD prefix
   const codMatch = name.match(/^COD[_-]?(\d+)/i)
   if (codMatch) return codMatch[1]
   return null
@@ -54,7 +52,7 @@ export async function importarImagensBatch(dirPath: string): Promise<BatchImageR
   const result: BatchImageResult = {
     total_files: files.length,
     matched: 0,
-    unmatched: 0,
+    playground: 0,
     errors: 0,
     details: []
   }
@@ -64,16 +62,30 @@ export async function importarImagensBatch(dirPath: string): Promise<BatchImageR
     const codigo = extractCode(filename)
 
     if (!codigo) {
-      result.unmatched++
-      result.details.push({ filename, codigo: null, status: 'unmatched', message: 'Codigo nao encontrado no nome do arquivo' })
+      // No code found — send to playground
+      try {
+        await adicionarImagemPlayground(filePath)
+        result.playground++
+        result.details.push({ filename, codigo: null, status: 'playground', message: 'Enviada pro Playground — sem codigo no nome' })
+      } catch (err) {
+        result.errors++
+        result.details.push({ filename, codigo: null, status: 'error', message: String(err) })
+      }
       continue
     }
 
     try {
       const produto = await porCodigo(codigo)
       if (!produto) {
-        result.unmatched++
-        result.details.push({ filename, codigo, status: 'unmatched', message: `Produto com codigo ${codigo} nao encontrado` })
+        // Code not found in DB — send to playground
+        try {
+          await adicionarImagemPlayground(filePath)
+          result.playground++
+          result.details.push({ filename, codigo, status: 'playground', message: `Codigo ${codigo} nao encontrado — enviada pro Playground` })
+        } catch (err) {
+          result.errors++
+          result.details.push({ filename, codigo, status: 'error', message: String(err) })
+        }
         continue
       }
 

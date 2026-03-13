@@ -1,0 +1,202 @@
+{
+  "status": "complete",
+  "subtasks_completed": [
+    {
+      "subtask_id": "subtask-1-1",
+      "status": "complete",
+      "implementation": {
+        "files_modified": ["src/shared/types.ts"],
+        "files_created": [],
+        "verification_result": "pass",
+        "verification_output": "npx tsc --noEmit completed with no errors",
+        "self_critique": {
+          "pattern_adherence": true,
+          "error_handling": true,
+          "code_cleanliness": true,
+          "issues_found": [],
+          "improvements_made": [
+            "Added inline comments for each field to match PRD intent (nome_sugerido, nome_card, etc)",
+            "Kept section header pattern '// === VISION AI ===' consistent with existing sections"
+          ]
+        }
+      },
+      "completed_at": "2026-03-13T03:30:00Z"
+    },
+    {
+      "subtask_id": "subtask-2-1",
+      "status": "complete",
+      "implementation": {
+        "files_modified": [],
+        "files_created": ["src/main/ia/vision.ts"],
+        "verification_result": "pass",
+        "verification_output": "npx tsc --noEmit completed with no errors",
+        "self_critique": {
+          "pattern_adherence": true,
+          "error_handling": true,
+          "code_cleanliness": true,
+          "issues_found": [],
+          "improvements_made": [
+            "Ported InstaFlow pattern exactly: readFile → base64 → generateText with image+text content",
+            "mimeType detection covers .png, .webp, and fallback to image/jpeg (InstaFlow only had png/jpeg)",
+            "Typeof checks on every field of the parsed JSON before returning (matches InstaFlow validate pattern)",
+            "VISION_PROMPT exported as named const for use in tests (as specified)",
+            "On JSON.parse failure returns partial object with confianca:0 and empty strings (matches spec)",
+            "Accepts createModel and modelo as params — never imports providers directly"
+          ]
+        }
+      },
+      "completed_at": "2026-03-13T03:45:00Z"
+    },
+    {
+      "subtask_id": "subtask-3-1",
+      "status": "complete",
+      "implementation": {
+        "files_modified": [],
+        "files_created": ["src/main/ia/batch-vision.ts"],
+        "verification_result": "pass",
+        "verification_output": "npx tsc --noEmit completed with no errors",
+        "self_critique": {
+          "pattern_adherence": true,
+          "error_handling": true,
+          "code_cleanliness": true,
+          "issues_found": [],
+          "improvements_made": [
+            "Used parameterized IN clause ($1, $2, ...) instead of ANY($1) for PGlite compatibility",
+            "path.isAbsolute() check before joining with getDataDir()/imagens/ to handle both relative and absolute paths",
+            "Read images inside the loop (not pre-loaded) via analisarProdutoImagem to avoid memory bloat",
+            "200ms delay skipped on last item (i < itens.length - 1) to avoid unnecessary wait at the end",
+            "broadcastToRenderer called both on success (with resultado) and error (with erro) for consistent frontend updates"
+          ]
+        }
+      },
+      "completed_at": "2026-03-13T04:10:00Z"
+    },
+    {
+      "subtask_id": "subtask-5-1",
+      "status": "complete",
+      "implementation": {
+        "files_modified": ["src/main/ia/tools.ts"],
+        "files_created": [],
+        "verification_result": "pass",
+        "verification_output": "npx tsc --noEmit completed with no errors (clean exit)",
+        "self_critique": {
+          "pattern_adherence": true,
+          "error_handling": true,
+          "code_cleanliness": true,
+          "issues_found": [],
+          "improvements_made": [
+            "Used inputSchema (not parameters) to match existing tool pattern in tools.ts",
+            "Added 4 new imports at top: path, buildModelFactory, analisarProdutoImagem, getDataDir",
+            "Added IaConfiguracao to existing shared/types import line",
+            "Added trailing comma to previous last tool (exportar_relatorio) before adding the new one",
+            "3-status pattern: toolResult('vazio') for missing image, toolResult('erro') for config/API issues, toolResult('ok') for success",
+            "path.isAbsolute() guard before joining with getDataDir() — consistent with batch-vision.ts pattern"
+          ]
+        }
+      },
+      "completed_at": "2026-03-13T05:00:00Z"
+    },
+    {
+      "subtask_id": "subtask-4-1",
+      "status": "complete",
+      "implementation": {
+        "files_modified": ["src/main/tipc.ts"],
+        "files_created": [],
+        "verification_result": "pass",
+        "verification_output": "npx tsc --noEmit completed with no errors (clean exit)",
+        "self_critique": {
+          "pattern_adherence": true,
+          "error_handling": true,
+          "code_cleanliness": true,
+          "issues_found": [],
+          "improvements_made": [
+            "Added trailing comma to 'ia.graph.explore' handler before inserting Vision AI section",
+            "Used '// ── Vision AI ─────────────────────────────────────────────────' section header matching existing Knowledge Graph header style",
+            "All 3 handlers use dynamic import() — no top-level imports added",
+            "vision.listar_com_imagem is the last handler (no trailing comma) to close the router object cleanly",
+            "inline type imports use import('../shared/types').TypeName pattern matching all existing handlers"
+          ]
+        }
+      },
+      "completed_at": "2026-03-13T05:30:00Z"
+    },
+    {
+      "subtask_id": "subtask-6-1",
+      "status": "complete",
+      "implementation": {
+        "files_modified": [],
+        "files_created": ["src/renderer/src/servicos/vision.ts"],
+        "verification_result": "pass",
+        "verification_output": "npx tsc --noEmit completed with no errors (clean exit)",
+        "self_critique": {
+          "pattern_adherence": true,
+          "error_handling": true,
+          "code_cleanliness": true,
+          "issues_found": [],
+          "improvements_made": [
+            "Followed exact pattern of produtos.ts: import client from './client', import types from '@shared/types'",
+            "ProdutoComImagem defined locally matching the SQL JOIN shape returned by vision.listar_com_imagem handler",
+            "Section comment '// === VISION AI ===' consistent with produtos.ts section headers",
+            "analisarBatch uses 'options ?? {}' to ensure non-undefined arg is always passed to client"
+          ]
+        }
+      },
+      "completed_at": "2026-03-13T06:00:00Z"
+    },
+    {
+      "subtask_id": "subtask-7-1",
+      "status": "complete",
+      "implementation": {
+        "files_modified": [],
+        "files_created": ["src/renderer/src/paginas/VisionRevisaoPagina.tsx"],
+        "verification_result": "pass",
+        "verification_output": "npx tsc --noEmit completed with no errors (clean exit)",
+        "self_critique": {
+          "pattern_adherence": true,
+          "error_handling": true,
+          "code_cleanliness": true,
+          "issues_found": [],
+          "improvements_made": [
+            "Extracted CardProduto as a named sub-component — consistent with GaleriaImagens pattern of splitting into small components",
+            "Added 'rejeitados' Set state to hide cards after rejection without mutating the server-side list",
+            "Used useDataDir() hook + imageUrl() helper matching exact pattern from GaleriaImagens",
+            "Loading skeleton matches ProdutosLista skeleton pattern (animate-pulse divs)",
+            "Batch accept button only renders when totalAcima80 > 0, showing count inline for UX feedback",
+            "Optimistic update on produtos list after accept/save — nome and nome_card updated locally without reload",
+            "IPC progress listener matches spec exactly: window.electron.ipcRenderer.on + removeListener cleanup"
+          ]
+        }
+      },
+      "completed_at": "2026-03-13T06:15:00Z"
+    },
+    {
+      "subtask_id": "subtask-8-1",
+      "status": "complete",
+      "implementation": {
+        "files_modified": [
+          "src/renderer/src/App.tsx",
+          "src/renderer/src/componentes/AppSidebar.tsx"
+        ],
+        "files_created": [],
+        "verification_result": "pass",
+        "verification_output": "npx tsc --noEmit completed with no errors (clean exit)",
+        "self_critique": {
+          "pattern_adherence": true,
+          "error_handling": true,
+          "code_cleanliness": true,
+          "issues_found": [],
+          "improvements_made": [
+            "Import placed after ConfiguracoesPagina (last existing import) to keep imports grouped",
+            "Route placed between /ia and /configuracoes — logical grouping of AI-related routes together",
+            "ScanEye added to existing lucide-react import line (no new import line created)",
+            "Vision AI nav item placed after Assistente IA — logical grouping of AI tools together"
+          ]
+        }
+      },
+      "completed_at": "2026-03-13T06:30:00Z"
+    }
+  ],
+  "subtasks_remaining": [],
+  "current_phase": "phase-8-wiring",
+  "updated_at": "2026-03-13T06:30:00Z"
+}

@@ -15,6 +15,7 @@ import {
   definirDefault,
   removerImagem
 } from '@renderer/servicos/produtos'
+import { useDataDir, imageUrl } from '@renderer/lib/image-url'
 import { UNIDADES, CATEGORIAS } from '@shared/constants'
 import type { Produto, ProdutoImagem } from '@shared/types'
 
@@ -23,6 +24,7 @@ export default function ProdutoDetalhe() {
   const navigate = useNavigate()
   const id = Number(produto_id)
 
+  const dataDir = useDataDir()
   const [produto, setProduto] = useState<Produto | null>(null)
   const [imagens, setImagens] = useState<ProdutoImagem[]>([])
   const [carregando, setCarregando] = useState(true)
@@ -260,7 +262,7 @@ export default function ProdutoDetalhe() {
               >
                 <div className="aspect-square bg-muted">
                   <img
-                    src={`file://${img.arquivo_path}`}
+                    src={imageUrl(dataDir, img.arquivo_path)}
                     alt={img.variacao ?? 'Imagem'}
                     className="w-full h-full object-cover"
                   />

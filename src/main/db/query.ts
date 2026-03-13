@@ -16,6 +16,23 @@ export async function execute(sql: string, params: unknown[] = []): Promise<void
   await db.query(sql, params)
 }
 
+/**
+ * INSERT com RETURNING — appends RETURNING <column> se não tiver na query.
+ * Retorna o valor da coluna inserida como number.
+ * Tabelas novas (ia_*) usam 'id'; tabelas legadas permitem override (ex: 'produto_id').
+ */
+export async function insertReturningId(
+  sql: string,
+  params: unknown[] = [],
+  returningColumn: string = 'id'
+): Promise<number> {
+  const db = await getDb()
+  const withReturning = sql.match(/RETURNING\s/i) ? sql : `${sql} RETURNING ${returningColumn}`
+  const result = await db.query(withReturning, params)
+  const row = result.rows[0] as Record<string, unknown> | undefined
+  return (row?.[returningColumn] as number) ?? 0
+}
+
 export async function transaction(fn: () => Promise<void>): Promise<void> {
   const db = await getDb()
   await db.query('BEGIN')

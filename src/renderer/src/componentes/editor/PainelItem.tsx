@@ -9,8 +9,10 @@ import { Save, Package, ImagePlus } from 'lucide-react'
 import { ImagePicker } from './ImagePicker'
 import { ImageComposer } from './ImageComposer'
 import type { ProdutoImagem } from '@shared/types'
+import { useDataDir, imageUrl } from '@renderer/lib/image-url'
 
 export function PainelItem() {
+  const dataDir = useDataDir()
   const { selected_item_id, itens, produtos_map, imagens_map, updateItem } = useEditorStore()
 
   const item = itens.find((i) => i.item_id === selected_item_id) || null
@@ -133,7 +135,7 @@ export function PainelItem() {
       {imagem && (
         <div className="rounded-md border overflow-hidden bg-gray-50 aspect-[4/3] flex items-center justify-center">
           <img
-            src={`file://${imagem.arquivo_path}`}
+            src={imageUrl(dataDir, imagem.arquivo_path)}
             alt={produto.nome}
             className="w-full h-full object-cover"
             style={{

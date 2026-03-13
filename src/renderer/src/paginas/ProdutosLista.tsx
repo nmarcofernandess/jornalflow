@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Search, FolderOpen } from 'lucide-react'
+import { Plus, Search } from 'lucide-react'
 import { Input } from '@renderer/components/ui/input'
 import { Button } from '@renderer/components/ui/button'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { ProdutoCard } from '@renderer/componentes/produtos/ProdutoCard'
 import { NovoProdutoDialog } from '@renderer/componentes/produtos/NovoProdutoDialog'
-import { BatchImport } from '@renderer/componentes/produtos/BatchImport'
 import { listarProdutos, buscarProdutos, listarImagens } from '@renderer/servicos/produtos'
 import type { Produto, ProdutoImagem } from '@shared/types'
 
@@ -15,7 +14,6 @@ export default function ProdutosLista() {
   const [termo, setTermo] = useState('')
   const [carregando, setCarregando] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [batchOpen, setBatchOpen] = useState(false)
 
   const carregarProdutos = useCallback(async () => {
     setCarregando(true)
@@ -64,16 +62,10 @@ export default function ProdutosLista() {
             {carregando ? '...' : `${produtos.length} produto${produtos.length !== 1 ? 's' : ''}`}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setBatchOpen(!batchOpen)}>
-            <FolderOpen className="h-4 w-4 mr-2" />
-            Importar Imagens
-          </Button>
-          <Button onClick={() => setDialogOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Novo Produto
-          </Button>
-        </div>
+        <Button onClick={() => setDialogOpen(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          Novo Produto
+        </Button>
       </div>
 
       {/* Search */}
@@ -86,14 +78,6 @@ export default function ProdutosLista() {
           className="pl-9"
         />
       </div>
-
-      {/* Batch Import */}
-      {batchOpen && (
-        <div className="border rounded-lg p-4">
-          <h3 className="font-medium mb-3">Importar Imagens em Lote</h3>
-          <BatchImport onComplete={carregarProdutos} />
-        </div>
-      )}
 
       {/* Grid */}
       {carregando ? (

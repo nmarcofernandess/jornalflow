@@ -5,7 +5,7 @@ import { applyMigrations } from '../../src/main/db/schema'
 describe('schema', () => {
   beforeAll(async () => {
     await getDb()
-  })
+  }, 30000)
   afterAll(async () => { await closeDb() })
 
   it('should apply all migrations without error', async () => {
@@ -27,6 +27,18 @@ describe('schema', () => {
     expect(names).toContain('secao_aliases')
     expect(names).toContain('lojas')
     expect(names).toContain('importacoes')
+    // IA v2 tables (migration v3)
+    expect(names).toContain('configuracao_ia')
+    expect(names).toContain('ia_conversas')
+    expect(names).toContain('ia_mensagens')
+    // Knowledge tables (migration v4)
+    expect(names).toContain('knowledge_sources')
+    expect(names).toContain('knowledge_chunks')
+    // Memory table (migration v5)
+    expect(names).toContain('ia_memorias')
+    // Knowledge graph tables (migration v6)
+    expect(names).toContain('knowledge_entities')
+    expect(names).toContain('knowledge_relations')
   })
 
   it('should be idempotent (running twice is safe)', async () => {

@@ -1,0 +1,759 @@
+{
+  "status": "complete",
+  "revision": 2,
+  "revision_notes": "Revised per critic findings. Fixes: (1) spread-vs-array param warnings on all knowledge/graph subtasks, (2) correct 16 tool names in subtask-6-1, (3) expanded PGlite.create() migration guidance in subtask-1-1, (4) split subtask-1-6 into 1-6a (core client) and 1-6b (streaming client), (5) split subtask-1-7 into 1-7a (streaming IPC + backend wiring), 1-7b (conversation CRUD handlers), 1-7c (frontend streaming integration note), (6) ipcRenderer cleanup guidance in subtask-1-9, (7) IaMensagem type creation clarified in subtask-1-4, (8) sugerir_precos replaced with exportar_relatorio in subtask-6-4, (9) insertReturningId column name strategy clarified, (10) chunking subtask merged (3-2 + 3-3), (11) embeddings model storage/download guidance added to subtask-3-4.",
+  "plan": {
+    "feature": "JornalFlow IA v2 — Port do EscalaFlow Intelligence Stack",
+    "workflow_type": "feature",
+    "phases": [
+      {
+        "id": "phase-1",
+        "name": "Infraestrutura Base",
+        "description": "Upgrade do PGlite com extensions, novas tabelas, multi-provider config, streaming client, IPC handlers, e frontend streaming. Esta fase transforma a IA de um generateText seco em uma infraestrutura completa com persistencia, streaming e multi-provider.",
+        "depends_on": [],
+        "subtasks": [
+          {
+            "id": "subtask-1-1",
+            "description": "UPGRADE PGlite com extensions (vector + pg_trgm). WHAT: Alterar database.ts para usar PGlite.create() com extensions {vector, pg_trgm} em vez de new PGlite(). WHERE: src/main/db/database.ts. HOW: (1) Mudar a inicializacao lazy em getDb() de 'db = new PGlite(dataDir)' para 'db = await PGlite.create({dataDir, extensions: {vector, pg_trgm}})'. NOTA: PGlite.create() e ASYNC e retorna Promise — getDb() ja e async, entao funciona. (2) LOGO APOS PGlite.create(), chamar: await db.exec('CREATE EXTENSION IF NOT EXISTS vector'); await db.exec('CREATE EXTENSION IF NOT EXISTS pg_trgm'); — isso DEVE vir antes de qualquer migration que use vector(768) ou gin_trgm_ops. (3) Para testes in-memory: usar PGlite.create({extensions: {vector, pg_trgm}}) SEM dataDir — verificar que extensions carregam em modo in-memory. (4) Instalar deps: npm i @electric-sql/pglite-vector @electric-sql/pglite-pg_trgm (verificar nomes exatos no npm). (5) Imports: import { vector } from '@electric-sql/pglite/vector'; import { pg_trgm } from '@electric-sql/pglite/contrib/pg_trgm' (conferir paths no EscalaFlow). REFERENCE: ~/escalaflow/src/main/db/pglite.ts linhas 39-45 para o pattern exato. BACKWARD COMPAT: Extensions sao aditivas, nao quebram dados existentes. TESTING STRATEGY: Rodar testes existentes (schema.test.ts) apos mudanca para garantir que migrations v1+v2 ainda funcionam com novo PGlite.create().",
+            "files_to_modify": [
+              "src/main/db/database.ts"
+            ],
+            "files_to_create": [],
+            "patterns_from": [
+              "~/escalaflow/src/main/db/pglite.ts"
+            ],
+            "verification": {
+              "type": "test",
+              "command": "npx vitest run tests/db/schema.test.ts",
+              "expected": "Existing schema tests still pass with new PGlite.create() + extensions"
+            },
+            "status": "pending"
+          },
+          {
+            "id": "subtask-1-2",
+            "description": "ADD insertReturningId() ao query.ts. WHAT: Adicionar helper insertReturningId(sql, params) que appends RETURNING <column> se nao tiver, retorna o valor inserido. WHERE: src/main/db/query.ts. HOW: IMPORTANTE — JornalFlow usa ARRAY params (queryOne(sql, [p1, p2])) enquanto EscalaFlow usa SPREAD params (queryOne(sql, p1, p2)). A nova funcao DEVE usar a convencao JornalFlow: insertReturningId(sql: string, params: unknown[] = [], returningColumn: string = 'id'): Promise<number>. O terceiro parametro opcional permite especificar o nome da coluna PK (default 'id' para tabelas novas, mas permite 'produto_id', 'jornal_id' etc para tabelas existentes). Logica: se SQL nao tem 'RETURNING', append 'RETURNING <returningColumn>'. Executar, retornar rows[0]?.[returningColumn] ?? 0. CONVENÇÃO PK: TODAS as tabelas NOVAS criadas nesta feature (configuracao_ia, ia_conversas, ia_mensagens, ia_memorias, knowledge_*) usarao 'id' como nome da coluna PK (SERIAL ou TEXT). Tabelas existentes continuam com produto_id, jornal_id, etc.",
+            "files_to_modify": [
+              "src/main/db/query.ts"
+            ],
+            "files_to_create": [],
+            "patterns_from": [
+              "~/escalaflow/src/main/db/query.ts"
+            ],
+            "verification": {
+              "type": "typecheck",
+              "command": "npx tsc --noEmit -p tsconfig.node.json",
+              "expected": "No type errors"
+            },
+            "status": "pending"
+          },
+          {
+            "id": "subtask-1-3",
+            "description": "ADD schema migration v3: configuracao_ia + ia_conversas + ia_mensagens tables. WHAT: Adicionar migration version 3 ao array MIGRATIONS[] com 3 novas tabelas. TODAS usam 'id' como PK (convencao para tabelas novas). configuracao_ia: id SERIAL PK, provider TEXT, api_key TEXT, modelo TEXT, provider_configs_json JSONB, ativo BOOLEAN, memoria_automatica BOOLEAN. ia_conversas: id TEXT PK (UUID gerado no app), titulo TEXT, status TEXT, resumo_compactado TEXT, criada_em TIMESTAMPTZ, atualizada_em TIMESTAMPTZ. ia_mensagens: id TEXT PK (UUID), conversa_id TEXT FK REFERENCES ia_conversas(id), papel TEXT, conteudo TEXT, tool_calls_json JSONB, anexos_meta_json JSONB, criada_em TIMESTAMPTZ. Indices em mensagens(conversa_id, criada_em) e conversas(status, atualizada_em). INSERT default row em configuracao_ia com provider='gemini', modelo='gemini-2.0-flash'. WHERE: src/main/db/schema.ts. HOW: Seguir pattern MIGRATIONS[] existente. Copiar DDL de ~/escalaflow/src/main/db/schema.ts (DDL_IA + DDL_IA_HISTORICO). NOTA: ia_conversas e ia_mensagens usam TEXT id (UUIDs) — insertReturningId NAO sera usado para estas tabelas (usar queryOne com RETURNING diretamente, ou execute + gerar UUID no codigo antes do INSERT).",
+            "files_to_modify": [
+              "src/main/db/schema.ts"
+            ],
+            "files_to_create": [],
+            "patterns_from": [
+              "~/escalaflow/src/main/db/schema.ts"
+            ],
+            "verification": {
+              "type": "test",
+              "command": "npx vitest run tests/db/schema.test.ts",
+              "expected": "Migrations apply cleanly, new tables exist"
+            },
+            "status": "pending"
+          },
+          {
+            "id": "subtask-1-4",
+            "description": "ADD shared types para IA v2. WHAT: ADICIONAR types novos em src/shared/types.ts SEM REMOVER nada que existe. CONTEXTO CRITICO: IaMensagem NAO existe atualmente em shared/types.ts. O que existe e: (1) um interface local 'IaMessage' em iaStore.ts com {role, content, timestamp}, (2) tipos inline em tipc.ts e servicos/ia.ts com {role: 'user'|'assistant', content: string}. Estes tipos inline serao substituidos DEPOIS quando subtask-1-9 atualizar iaStore e servicos/ia.ts. TIPOS A ADICIONAR: IaContexto (com paginas do JornalFlow: 'dashboard'|'produtos'|'editor'|'historico'|'galeria'|'configuracoes'|'ia'|'outro'), IaStreamEvent (discriminated union com 8 types: text-delta, tool-call-start, tool-call-args, tool-result, step-finish, finish, error, follow-up-start), ToolCall (id, name, args?, result?), IaAnexo (tipo, nome, tamanho, dados), IaMensagem (id, papel: 'usuario'|'assistente'|'tool_result', conteudo, criada_em, tool_calls?, anexos?), IaConfiguracao (id, provider, api_key, modelo, provider_configs_json, ativo, memoria_automatica), IaConversa (id, titulo, status, resumo_compactado, criada_em, atualizada_em), IaMensagemDB (extends IaMensagem com conversa_id), IaMemoria (id, conteudo, origem, criada_em, atualizada_em), KnowledgeSource, KnowledgeChunk, KnowledgeEntity, KnowledgeRelation. WHERE: src/shared/types.ts. HOW: APPEND novos types ao final do arquivo. NAO remover nenhum tipo existente neste subtask. Os tipos antigos inline serao migrados gradualmente nos subtasks seguintes.",
+            "files_to_modify": [
+              "src/shared/types.ts"
+            ],
+            "files_to_create": [],
+            "patterns_from": [
+              "~/escalaflow/src/shared/types.ts"
+            ],
+            "verification": {
+              "type": "typecheck",
+              "command": "npm run typecheck",
+              "expected": "No type errors — novos tipos foram adicionados sem remover nada existente"
+            },
+            "status": "pending"
+          },
+          {
+            "id": "subtask-1-5",
+            "description": "REWRITE config.ts com multi-provider factory. WHAT: Substituir o config.ts atual (23 linhas, Gemini-only, in-memory apiKey) por multi-provider config com DB persistence. Exports: PROVIDER_DEFAULTS (gemini + openrouter), resolveModel(config, providerLabel), isValidModelForProvider(), buildModelFactory(config), resolveProviderApiKey(config). SEM local provider (JornalFlow nao tem ollama). WHERE: src/main/ia/config.ts. HOW: Port direto de ~/escalaflow/src/main/ia/config.ts. Remover bloco 'local'. Instalar @openrouter/ai-sdk-provider. Manter apenas gemini + openrouter. A config agora vem do DB (configuracao_ia table), nao mais de variavel in-memory. NOTA sobre query helpers: JornalFlow query helpers usam ARRAY params — ex: queryOne<IaConfiguracao>('SELECT * FROM configuracao_ia WHERE id = $1', [1]), NAO queryOne(sql, 1).",
+            "files_to_modify": [
+              "src/main/ia/config.ts",
+              "package.json"
+            ],
+            "files_to_create": [],
+            "patterns_from": [
+              "~/escalaflow/src/main/ia/config.ts"
+            ],
+            "verification": {
+              "type": "typecheck",
+              "command": "npx tsc --noEmit -p tsconfig.node.json",
+              "expected": "No type errors"
+            },
+            "status": "pending"
+          },
+          {
+            "id": "subtask-1-6a",
+            "description": "REWRITE cliente.ts — CORE: generateText + follow-up + tool result truncation. WHAT: Substituir o cliente.ts atual (23 linhas) pela parte CORE do cliente (sem streaming). Exports: iaEnviarMensagem(), iaTestarConexao(), __iaClienteTestables. Funcionalidades core: truncateText/safeCompactJson/toolResultToText (TOOL_RESULT_MAX_CHARS=1500), buildUserContent (com anexos), buildChatMessages (com resumo compactado — stub retorna null por enquanto), extractToolCallsFromSteps, buildFullSystemPrompt (retorna SYSTEM_PROMPT direto por enquanto — discovery sera wired na Phase 2), follow-up pattern (se tools rodam sem texto → auto follow-up com response.messages), broadcastToRenderer via BrowserWindow (helper para emitir eventos ao renderer). WHERE: src/main/ia/cliente.ts. HOW: Port de ~/escalaflow/src/main/ia/cliente.ts. Portar APENAS as funcoes de generateText path. Remover blocos 'local' (localLlmChat). Manter apenas gemini + openrouter. Stubs: buildFullSystemPrompt retorna SYSTEM_PROMPT; maybeCompact retorna null. NOTA sobre query helpers: Quando chamar query helpers neste arquivo, usar ARRAY params: queryOne(sql, [param1, param2]), NAO queryOne(sql, param1, param2).",
+            "files_to_modify": [
+              "src/main/ia/cliente.ts"
+            ],
+            "files_to_create": [],
+            "patterns_from": [
+              "~/escalaflow/src/main/ia/cliente.ts"
+            ],
+            "verification": {
+              "type": "typecheck",
+              "command": "npx tsc --noEmit -p tsconfig.node.json",
+              "expected": "No type errors"
+            },
+            "status": "pending"
+          },
+          {
+            "id": "subtask-1-6b",
+            "description": "ADD streaming ao cliente.ts — iaEnviarMensagemStream + BrowserWindow broadcast. WHAT: Adicionar iaEnviarMensagemStream() ao cliente.ts ja reescrito em 1-6a. Funcionalidades: emitStream() que envia IaStreamEvent via BrowserWindow.webContents.send('ia:stream', event), streamText integration com callbacks onTextPart/onToolCall/onToolResult/onStepFinish/onFinish/onError, follow-up pattern para streaming (se tools sem texto → novo stream). WHERE: src/main/ia/cliente.ts. HOW: Port de ~/escalaflow/src/main/ia/cliente.ts funcao _callWithVercelAiSdkToolsStreaming. Usar BrowserWindow.getAllWindows()[0] para broadcast (mesmo pattern do EscalaFlow). Stream events devem ser tipados como IaStreamEvent (do shared/types.ts). NOTA sobre query helpers: Quando chamar query helpers, usar ARRAY params.",
+            "files_to_modify": [
+              "src/main/ia/cliente.ts"
+            ],
+            "files_to_create": [],
+            "patterns_from": [
+              "~/escalaflow/src/main/ia/cliente.ts"
+            ],
+            "verification": {
+              "type": "typecheck",
+              "command": "npx tsc --noEmit -p tsconfig.node.json",
+              "expected": "No type errors"
+            },
+            "status": "pending"
+          },
+          {
+            "id": "subtask-1-7a",
+            "description": "ADD IPC handlers — streaming handler + backend wiring. WHAT: Adicionar o handler de streaming e wiring com o backend IA. Novos handlers: ia.stream (streaming via iaEnviarMensagemStream — recebe mensagem, contexto, conversa_id), ia.config.get (ler configuracao_ia do DB), ia.config.save (salvar provider/api_key/modelo/provider_configs_json), ia.config.test (iaTestarConexao). Manter ia.chat existente como wrapper de backward compat que chama iaEnviarMensagem. Manter ia.set_api_key e ia.get_api_key como deprecated wrappers. WHERE: src/main/tipc.ts. HOW: Seguir pattern existente t.procedure.input<Type>().action(). Cada handler faz import dinamico (await import('./ia/cliente')). Config handlers fazem queries diretas via queryOne/execute com ARRAY params.",
+            "files_to_modify": [
+              "src/main/tipc.ts"
+            ],
+            "files_to_create": [],
+            "patterns_from": [
+              "~/escalaflow/src/main/ia/cliente.ts"
+            ],
+            "verification": {
+              "type": "typecheck",
+              "command": "npx tsc --noEmit -p tsconfig.node.json",
+              "expected": "No type errors"
+            },
+            "status": "pending"
+          },
+          {
+            "id": "subtask-1-7b",
+            "description": "ADD IPC handlers — conversation CRUD. WHAT: Adicionar handlers para gerenciamento de conversas e mensagens. Novos handlers: ia.conversas.listar (SELECT com ORDER BY atualizada_em DESC, filtrar por status), ia.conversas.criar (INSERT com UUID gerado via crypto.randomUUID()), ia.conversas.arquivar (UPDATE status='arquivada'), ia.mensagens.listar (SELECT WHERE conversa_id ORDER BY criada_em), ia.mensagens.salvar (INSERT mensagem com UUID). WHERE: src/main/tipc.ts. HOW: Seguir pattern existente. Queries diretas via queryAll/queryOne/execute com ARRAY params. UUIDs gerados via crypto.randomUUID() no handler (nao usar insertReturningId para tabelas com TEXT id).",
+            "files_to_modify": [
+              "src/main/tipc.ts"
+            ],
+            "files_to_create": [],
+            "patterns_from": [],
+            "verification": {
+              "type": "typecheck",
+              "command": "npx tsc --noEmit -p tsconfig.node.json",
+              "expected": "No type errors"
+            },
+            "status": "pending"
+          },
+          {
+            "id": "subtask-1-8",
+            "description": "UPDATE index.ts bootstrap para IA v2. WHAT: Remover o carregamento de API key via env/setApiKey. Adicionar: carregar configuracao_ia do DB no boot, logar provider ativo. O config agora vive no DB, nao mais em memoria. WHERE: src/main/index.ts. HOW: No app.whenReady(), apos applyMigrations() e seed(), adicionar: const iaConfig = await queryOne('SELECT * FROM configuracao_ia LIMIT 1', []). Logar: console.log('[boot] IA provider:', iaConfig?.provider). Remover import/uso de setApiKey.",
+            "files_to_modify": [
+              "src/main/index.ts"
+            ],
+            "files_to_create": [],
+            "patterns_from": [],
+            "verification": {
+              "type": "command",
+              "command": "npx tsc --noEmit -p tsconfig.node.json",
+              "expected": "No type errors"
+            },
+            "status": "pending"
+          },
+          {
+            "id": "subtask-1-9",
+            "description": "UPDATE frontend iaStore + servicos/ia.ts para streaming e conversas. WHAT: Expandir iaStore com: conversations[], currentConversaId, streamingText, streamingToolCalls[], isStreaming. Remover o antigo IaMessage interface local (substituir pelo IaMensagem do shared/types). Expandir servicos/ia.ts com: IPC listeners para ia:stream events, sendMessage (via ia.stream), loadConversas, createConversa, archiveConversa, loadMessages, saveMessage. WHERE: src/renderer/src/store/iaStore.ts, src/renderer/src/servicos/ia.ts. HOW: iaStore: adicionar slices para conversas, streaming state, currentConversa. Substituir IaMessage local por import de IaMensagem de @shared/types. servicos/ia.ts: usar window.electron.ipcRenderer.on('ia:stream', handler) para receber stream events. LISTENER CLEANUP OBRIGATORIO: (1) window.electron.ipcRenderer.on() retorna uma funcao de unsubscribe, (2) GUARDAR a referencia do unsubscribe, (3) chamar unsubscribe no cleanup do useEffect do React E antes de iniciar um novo stream (evitar ghost listeners), (4) ao trocar de conversa ou desmontar componente de chat, SEMPRE chamar unsubscribe. Pattern: const unsub = ipcRenderer.on('ia:stream', handler); return () => unsub(); em useEffect. SEM CLEANUP = MEMORY LEAK garantido.",
+            "files_to_modify": [
+              "src/renderer/src/store/iaStore.ts",
+              "src/renderer/src/servicos/ia.ts"
+            ],
+            "files_to_create": [],
+            "patterns_from": [],
+            "verification": {
+              "type": "typecheck",
+              "command": "npm run typecheck",
+              "expected": "No type errors"
+            },
+            "status": "pending"
+          },
+          {
+            "id": "subtask-1-10",
+            "description": "UPDATE frontend IaPagina + IaChatPanel para streaming UI. WHAT: Atualizar IaPagina.tsx e IaChatPanel.tsx para usar streaming text (caractere por caractere), tool call indicators (loading spinners com nome da tool), conversation sidebar (lista de conversas). WHERE: src/renderer/src/paginas/IaPagina.tsx, src/renderer/src/componentes/ia/IaChatPanel.tsx. HOW: Substituir o pattern request-response (loading -> full text) por streaming pattern (isStreaming + streamingText progressivo). Mostrar tool calls em andamento com Loader icon. Conversation list no sidebar. Usar stores do subtask-1-9. LISTENER CLEANUP: Componentes que usam useEffect para escutar stream events DEVEM retornar cleanup function que chama unsubscribe. Se o componente desmonta durante um stream ativo, o listener deve ser removido.",
+            "files_to_modify": [
+              "src/renderer/src/paginas/IaPagina.tsx",
+              "src/renderer/src/componentes/ia/IaChatPanel.tsx"
+            ],
+            "files_to_create": [],
+            "patterns_from": [],
+            "verification": {
+              "type": "manual",
+              "instructions": "Run npm run dev, open IA page, send a message. Text should appear progressively (streaming). Tool calls should show indicator."
+            },
+            "status": "pending"
+          },
+          {
+            "id": "subtask-1-11",
+            "description": "UPDATE ConfiguracoesPagina para multi-provider settings. WHAT: Substituir o campo unico de API key do Gemini por: seletor de provider (Gemini / OpenRouter), campos de API key e modelo por provider, botao de teste de conexao por provider. WHERE: src/renderer/src/paginas/ConfiguracoesPagina.tsx. HOW: Carregar config via ia.config.get. UI: radio/select para provider, input de API key, input de modelo (com default sugerido), botao 'Testar Conexao' que chama ia.config.test. Salvar via ia.config.save.",
+            "files_to_modify": [
+              "src/renderer/src/paginas/ConfiguracoesPagina.tsx"
+            ],
+            "files_to_create": [],
+            "patterns_from": [],
+            "verification": {
+              "type": "manual",
+              "instructions": "Run npm run dev, go to Configuracoes, verify multi-provider UI renders. Select Gemini, enter key, save, test connection."
+            },
+            "status": "pending"
+          },
+          {
+            "id": "subtask-1-12",
+            "description": "ADD tests para IA config e cliente. WHAT: Testes unitarios para config.ts (resolveModel, isValidModelForProvider, resolveProviderApiKey, buildModelFactory) e cliente.ts helpers exportados via __iaClienteTestables (normalizeToolArgs, buildChatMessages, extractToolCallsFromSteps). WHERE: tests/ia/config.test.ts, tests/ia/cliente.test.ts. HOW: Testes puros (sem DB, sem LLM). config: testar cada provider default, modelo valido/invalido para cada provider, resolucao de api_key de provider_configs_json. cliente: testar buildChatMessages com historico vazio, com historico com tool_calls, com resumo compactado, com anexos. extractToolCallsFromSteps com steps variados.",
+            "files_to_modify": [],
+            "files_to_create": [
+              "tests/ia/config.test.ts",
+              "tests/ia/cliente.test.ts"
+            ],
+            "patterns_from": [
+              "~/escalaflow/src/main/ia/config.ts",
+              "~/escalaflow/src/main/ia/cliente.ts"
+            ],
+            "verification": {
+              "type": "test",
+              "command": "npx vitest run tests/ia/",
+              "expected": "All tests pass"
+            },
+            "status": "pending"
+          }
+        ]
+      },
+      {
+        "id": "phase-2",
+        "name": "Discovery Automatico",
+        "description": "Criar o modulo de discovery que auto-injeta contexto relevante no system prompt. Adaptar o system prompt de 17 linhas para ~200+ linhas com 9 secoes domain-specific.",
+        "depends_on": [
+          "phase-1"
+        ],
+        "subtasks": [
+          {
+            "id": "subtask-2-1",
+            "description": "CREATE discovery.ts com buildContextBriefing adaptado para JornalFlow. WHAT: Criar src/main/ia/discovery.ts com export async function buildContextBriefing(contexto?: IaContexto, mensagemUsuario?: string): Promise<string>. Secoes: (1) Rota atual, (2) Memorias (ia_memorias, graceful se tabela nao existe), (3) Auto-RAG (busca knowledge, graceful se modulo nao existe), (4) Resumo global (COUNT de produtos ativos, produtos com imagem, total imagens, total jornais, jornais rascunho), (5) Secoes do template (template_secoes com aliases), (6) Jornal em foco (se contexto tem jornal_id: detalhes do jornal, secoes, itens, importacao), (7) Alertas proativos (produtos sem imagem, secoes vazias no jornal, itens com is_fallback, precos zerados), (8) Stats knowledge (graceful), (9) Dica de pagina (map rotas JornalFlow). WHERE: src/main/ia/discovery.ts. HOW: Adaptar ~/escalaflow/src/main/ia/discovery.ts. Trocar queries de setores/colaboradores/escalas por queries de produtos/jornais/secoes/importacoes. Usar try/catch em cada secao para graceful degradation (tabelas de memorias/knowledge podem nao existir ainda). NOTA PARAMS: Todas as queries DEVEM usar ARRAY params: queryAll(sql, [param1, param2]), NAO queryAll(sql, param1, param2).",
+            "files_to_modify": [],
+            "files_to_create": [
+              "src/main/ia/discovery.ts"
+            ],
+            "patterns_from": [
+              "~/escalaflow/src/main/ia/discovery.ts"
+            ],
+            "verification": {
+              "type": "typecheck",
+              "command": "npx tsc --noEmit -p tsconfig.node.json",
+              "expected": "No type errors"
+            },
+            "status": "pending"
+          },
+          {
+            "id": "subtask-2-2",
+            "description": "REWRITE sistema-prompt.ts com 9 secoes domain-specific. WHAT: Expandir o prompt de 17 linhas para ~200+ linhas. Secoes: (1) Identidade — assistente do JornalFlow, Sup Fernandes, Luis Antonio SP. (2) Dominio — secoes do jornal (Acougue, Horti Fruti, Mercearia, Padaria, Casa&Higiene), categorias de produtos, fluxo de importacao XLS, naming patterns. (3) Schema de referencia — tabelas e campos (produtos, produto_imagens, template_secoes, jornais, jornal_paginas, jornal_secoes, jornal_itens, importacoes). (4) Tools guide — quando usar cada tool, discovery design. Referenciar as 16 tools REAIS: buscar_produtos, ver_produto, cadastrar_produto, atualizar_produto, listar_imagens, definir_imagem_default, buscar_jornal_atual, status_importacao, trocar_item, atualizar_item, buscar_historico, comparar_precos, listar_secoes, adicionar_secao, revisar_planilha, stats_banco. (5) Workflows comuns — importar planilha, revisar jornal, buscar produto, trocar imagem, gerar carrossel. (6) Formatacao de respostas — markdown rules, formato brasileiro R$. (7) Memorias e Conhecimento — quando salvar, quando buscar (graceful: mencionar tools futuras). (8) Contexto automatico — o que o discovery injeta. (9) Conduta e limitacoes. WHERE: src/main/ia/sistema-prompt.ts. HOW: Seguir pattern de ~/escalaflow/src/main/ia/system-prompt.ts mas adaptar TODO o conteudo para dominio de jornais/produtos.",
+            "files_to_modify": [
+              "src/main/ia/sistema-prompt.ts"
+            ],
+            "files_to_create": [],
+            "patterns_from": [
+              "~/escalaflow/src/main/ia/system-prompt.ts"
+            ],
+            "verification": {
+              "type": "typecheck",
+              "command": "npx tsc --noEmit -p tsconfig.node.json",
+              "expected": "No type errors (it's a string export)"
+            },
+            "status": "pending"
+          },
+          {
+            "id": "subtask-2-3",
+            "description": "WIRE discovery into cliente.ts buildFullSystemPrompt. WHAT: Atualizar buildFullSystemPrompt em cliente.ts para chamar buildContextBriefing do discovery.ts. WHERE: src/main/ia/cliente.ts. HOW: Importar buildContextBriefing de './discovery'. Na funcao buildFullSystemPrompt, chamar await buildContextBriefing(contexto, mensagemUsuario) e concatenar com SYSTEM_PROMPT. Pattern: return contextBriefing ? SYSTEM_PROMPT + '\\n\\n---\\n' + contextBriefing : SYSTEM_PROMPT. Exatamente como ~/escalaflow/src/main/ia/cliente.ts faz.",
+            "files_to_modify": [
+              "src/main/ia/cliente.ts"
+            ],
+            "files_to_create": [],
+            "patterns_from": [
+              "~/escalaflow/src/main/ia/cliente.ts"
+            ],
+            "verification": {
+              "type": "typecheck",
+              "command": "npx tsc --noEmit -p tsconfig.node.json",
+              "expected": "No type errors"
+            },
+            "status": "pending"
+          }
+        ]
+      },
+      {
+        "id": "phase-3",
+        "name": "Knowledge Base (RAG Local)",
+        "description": "Tabelas de knowledge, embeddings offline via HuggingFace, chunking, ingestion pipeline, hybrid search, e seed com conteudo do dominio.",
+        "depends_on": [
+          "phase-1"
+        ],
+        "subtasks": [
+          {
+            "id": "subtask-3-1",
+            "description": "ADD schema migration v4: knowledge_sources + knowledge_chunks tables. WHAT: Adicionar migration version 4 com 2 tabelas. AMBAS usam 'id SERIAL PRIMARY KEY' (convencao tabelas novas). knowledge_sources: id SERIAL PK, tipo (manual/auto_capture/sistema/importacao_usuario), titulo, conteudo_original, metadata JSONB, importance (high/low), ativo BOOLEAN, timestamps. knowledge_chunks: id SERIAL PK, source_id FK REFERENCES knowledge_sources(id), conteudo, embedding vector(768), search_tsv TSVECTOR, importance, access_count, last_accessed_at, criada_em. Indices: GIN em search_tsv, GIN em conteudo gin_trgm_ops. WHERE: src/main/db/schema.ts. HOW: Adicionar entry {version: 4, up: SQL} ao MIGRATIONS array. SQL copiado de ~/escalaflow/src/main/db/schema.ts DDL_V7_KNOWLEDGE. CRITICAL: extension vector e pg_trgm devem ter sido habilitadas em database.ts (subtask-1-1) ANTES desta migration rodar.",
+            "files_to_modify": [
+              "src/main/db/schema.ts"
+            ],
+            "files_to_create": [],
+            "patterns_from": [
+              "~/escalaflow/src/main/db/schema.ts"
+            ],
+            "verification": {
+              "type": "test",
+              "command": "npx vitest run tests/db/schema.test.ts",
+              "expected": "All migrations apply cleanly including v4"
+            },
+            "status": "pending"
+          },
+          {
+            "id": "subtask-3-2",
+            "description": "CREATE chunking.ts + tests (TDD). WHAT: Criar src/main/knowledge/chunking.ts com export function chunkText(text, maxChars=1500, overlap=200): string[]. E criar testes em tests/knowledge/chunking.test.ts. WHERE: src/main/knowledge/chunking.ts, tests/knowledge/chunking.test.ts. HOW: Port DIRETO de ~/escalaflow/src/main/knowledge/chunking.ts — modulo e domain-agnostic, zero adaptacao necessaria. Testes: texto vazio, texto menor que maxChars, texto com paragrafos (split em \\n\\n), texto com frases (split em '. '), texto longo sem separadores (fallback), overlap funciona (chars repetidos entre chunks). Testes puros, sem DB. NOTA: chunking.ts e apenas ~57 linhas — testes e codigo ficam juntos neste subtask para eficiencia.",
+            "files_to_modify": [],
+            "files_to_create": [
+              "src/main/knowledge/chunking.ts",
+              "tests/knowledge/chunking.test.ts"
+            ],
+            "patterns_from": [
+              "~/escalaflow/src/main/knowledge/chunking.ts"
+            ],
+            "verification": {
+              "type": "test",
+              "command": "npx vitest run tests/knowledge/chunking.test.ts",
+              "expected": "All chunking tests pass"
+            },
+            "status": "pending"
+          },
+          {
+            "id": "subtask-3-3",
+            "description": "CREATE embeddings.ts — offline ONNX embeddings com graceful degradation. WHAT: Criar src/main/knowledge/embeddings.ts com exports: generateQueryEmbedding(text): Promise<number[]|null>, generatePassageEmbedding(text): Promise<number[]|null>, generatePassageEmbeddings(texts): Promise<number[][]|null>. WHERE: src/main/knowledge/embeddings.ts. HOW: Port de ~/escalaflow/src/main/knowledge/embeddings.ts. Adaptar resolveModelPath() para JornalFlow paths. Instalar @huggingface/transformers no package.json. Modelo: Xenova/multilingual-e5-base (768 dims, ONNX q8). Prefixes: 'query: ' para busca, 'passage: ' para indexacao. CRITICO: NUNCA lancar erro — retornar null se modelo indisponivel (graceful degradation total). MODEL STORAGE & DOWNLOAD: (1) Modelo armazenado em getDataDir() + '/models/' (reutilizar helper de path do JornalFlow). (2) Download e automatico na primeira chamada via @huggingface/transformers pipeline API. (3) Modelo tem ~150-440MB — o primeiro uso sera lento. (4) Log progresso: console.log('[embeddings] Downloading model...') na primeira vez. (5) Testar compatibilidade do ONNX runtime com Node.js do Electron (electron usa Node interno). (6) Se download falhar ou ONNX incompativel, retornar null (graceful).",
+            "files_to_modify": [
+              "package.json"
+            ],
+            "files_to_create": [
+              "src/main/knowledge/embeddings.ts"
+            ],
+            "patterns_from": [
+              "~/escalaflow/src/main/knowledge/embeddings.ts"
+            ],
+            "verification": {
+              "type": "typecheck",
+              "command": "npx tsc --noEmit -p tsconfig.node.json",
+              "expected": "No type errors"
+            },
+            "status": "pending"
+          },
+          {
+            "id": "subtask-3-4",
+            "description": "CREATE ingest.ts — ingestion pipeline (source -> chunk -> embed -> FTS). WHAT: Criar src/main/knowledge/ingest.ts com export async function ingestKnowledge(titulo, conteudo, importance, metadata): Promise<{source_id, chunks_count, entities_count}>. WHERE: src/main/knowledge/ingest.ts. HOW: Port de ~/escalaflow/src/main/knowledge/ingest.ts. Inclui extractAndPrependHint (extrai <!-- quando_usar: ... --> do topo). Pipeline: insert source -> chunkText -> generatePassageEmbeddings -> insert chunks com embedding + to_tsvector('portuguese'). *** ATENCAO SPREAD vs ARRAY ***: EscalaFlow usa spread params (insertReturningId(sql, tipo, titulo, conteudo, metadata, importance)). JornalFlow usa ARRAY params. CONVERTER TODAS as chamadas para: insertReturningId(sql, [tipo, titulo, conteudo, metadata, importance]). Mesmo para queryOne, queryAll, execute — SEMPRE array. Ex EscalaFlow: execute(sql, chunkId, embedding) -> JornalFlow: execute(sql, [chunkId, embedding]). Parametros $1/$2 style (JornalFlow convention).",
+            "files_to_modify": [],
+            "files_to_create": [
+              "src/main/knowledge/ingest.ts"
+            ],
+            "patterns_from": [
+              "~/escalaflow/src/main/knowledge/ingest.ts"
+            ],
+            "verification": {
+              "type": "typecheck",
+              "command": "npx tsc --noEmit -p tsconfig.node.json",
+              "expected": "No type errors"
+            },
+            "status": "pending"
+          },
+          {
+            "id": "subtask-3-5",
+            "description": "CREATE search.ts — hybrid vector + FTS + trigram search. WHAT: Criar src/main/knowledge/search.ts com export async function searchKnowledge(query, options?): Promise<SearchResult>. SearchResult: {chunks, relations, context_for_llm}. WHERE: src/main/knowledge/search.ts. HOW: Port de ~/escalaflow/src/main/knowledge/search.ts. hybridSearch: 70% vector + 30% FTS com importance boost (+0.15 para high). keywordOnlySearch: FTS + trigram fallback. trackAccess: update access_count. getRelatedEntities: busca relacoes de entidades mencionadas nos chunks (graceful se knowledge_entities nao existe — usar try/catch retornando []). buildContextForLlm: formata chunks + relacoes para injecao no LLM. exploreRelations: CTE recursivo para graph traversal. *** ATENCAO SPREAD vs ARRAY ***: CONVERTER TODAS as chamadas de query helpers de spread para array. EscalaFlow: queryAll(sql, embedding, limit) -> JornalFlow: queryAll(sql, [embedding, limit]). EscalaFlow: queryOne(sql, entityId) -> JornalFlow: queryOne(sql, [entityId]). EscalaFlow: execute(sql, chunkId) -> JornalFlow: execute(sql, [chunkId]). Todas as queries em $1/$2 style.",
+            "files_to_modify": [],
+            "files_to_create": [
+              "src/main/knowledge/search.ts"
+            ],
+            "patterns_from": [
+              "~/escalaflow/src/main/knowledge/search.ts"
+            ],
+            "verification": {
+              "type": "typecheck",
+              "command": "npx tsc --noEmit -p tsconfig.node.json",
+              "expected": "No type errors"
+            },
+            "status": "pending"
+          },
+          {
+            "id": "subtask-3-6",
+            "description": "CREATE seed-knowledge.ts + knowledge seed files. WHAT: Criar src/main/db/seed-knowledge.ts que ingesta conteudo domain-specific na base de conhecimento no boot (idempotente). Criar seed markdown files em src/main/knowledge/seeds/. Conteudo seed: (1) secoes-jornal.md — descricao das 5 secoes (Acougue, Horti Fruti, Mercearia, Padaria, Casa&Higiene), o que cada secao contem, padroes de naming. (2) regras-layout.md — grid system, posicoes, lados, paginas. (3) fluxo-importacao.md — como funciona importacao de planilha XLS. (4) padroes-naming.md — patterns de nome de produto, codigos, unidades. WHERE: src/main/db/seed-knowledge.ts, src/main/knowledge/seeds/*.md. HOW: seed-knowledge.ts: para cada seed file, verificar se knowledge_source com titulo ja existe (idempotente), se nao existe chamar ingestKnowledge(). Chamar no boot em index.ts apos applyMigrations. *** ATENCAO SPREAD vs ARRAY ***: Queries em seed-knowledge.ts DEVEM usar array params: queryOne(sql, [titulo]), NAO queryOne(sql, titulo).",
+            "files_to_modify": [
+              "src/main/index.ts"
+            ],
+            "files_to_create": [
+              "src/main/db/seed-knowledge.ts",
+              "src/main/knowledge/seeds/secoes-jornal.md",
+              "src/main/knowledge/seeds/regras-layout.md",
+              "src/main/knowledge/seeds/fluxo-importacao.md",
+              "src/main/knowledge/seeds/padroes-naming.md"
+            ],
+            "patterns_from": [
+              "src/main/db/seed.ts"
+            ],
+            "verification": {
+              "type": "command",
+              "command": "npx tsc --noEmit -p tsconfig.node.json",
+              "expected": "No type errors"
+            },
+            "status": "pending"
+          },
+          {
+            "id": "subtask-3-7",
+            "description": "ADD knowledge IPC handlers + buscar_conhecimento tool. WHAT: Adicionar handlers no tipc.ts: ia.knowledge.search (busca semantica), ia.knowledge.ingest (adicionar fonte manual), ia.knowledge.list (listar sources). Adicionar tool buscar_conhecimento no tools.ts (chama searchKnowledge). WHERE: src/main/tipc.ts, src/main/ia/tools.ts. HOW: Handlers seguem pattern existente. buscar_conhecimento tool: input {query: string, limite?: number}, chama searchKnowledge, retorna context_for_llm. Pattern 3-status (sera aplicado na Phase 6, por agora pode ser formato simples). *** ATENCAO SPREAD vs ARRAY ***: Qualquer query helper usada nos handlers DEVE usar array params.",
+            "files_to_modify": [
+              "src/main/tipc.ts",
+              "src/main/ia/tools.ts"
+            ],
+            "files_to_create": [],
+            "patterns_from": [
+              "~/escalaflow/src/main/ia/tools.ts"
+            ],
+            "verification": {
+              "type": "typecheck",
+              "command": "npx tsc --noEmit -p tsconfig.node.json",
+              "expected": "No type errors"
+            },
+            "status": "pending"
+          }
+        ]
+      },
+      {
+        "id": "phase-4",
+        "name": "Memoria e Session Management",
+        "description": "Auto-extracao de memorias de conversas via LLM, dedup por cosine similarity, history compaction, e integracao no discovery briefing.",
+        "depends_on": [
+          "phase-3"
+        ],
+        "subtasks": [
+          {
+            "id": "subtask-4-1",
+            "description": "ADD schema migration v5: ia_memorias table. WHAT: Adicionar migration version 5 com tabela ia_memorias: id SERIAL PK (convencao tabelas novas), conteudo TEXT NOT NULL, origem TEXT ('manual'/'auto'), embedding vector(768), criada_em TIMESTAMPTZ DEFAULT NOW(), atualizada_em TIMESTAMPTZ DEFAULT NOW(). WHERE: src/main/db/schema.ts. HOW: Adicionar entry {version: 5, up: SQL} ao MIGRATIONS array.",
+            "files_to_modify": [
+              "src/main/db/schema.ts"
+            ],
+            "files_to_create": [],
+            "patterns_from": [
+              "~/escalaflow/src/main/db/schema.ts"
+            ],
+            "verification": {
+              "type": "test",
+              "command": "npx vitest run tests/db/schema.test.ts",
+              "expected": "Migration v5 applies cleanly"
+            },
+            "status": "pending"
+          },
+          {
+            "id": "subtask-4-2",
+            "description": "CREATE session-processor.ts — memory extraction + compaction. WHAT: Criar src/main/ia/session-processor.ts com exports: sanitizeTranscript(mensagens), estimateTokens(text), extractMemories(conversa_id, mensagens, createModel, modelo), maybeCompact(conversa_id, historico, createModel, modelo). WHERE: src/main/ia/session-processor.ts. HOW: Port DIRETO de ~/escalaflow/src/main/ia/session-processor.ts. Adaptar extraction prompt de 'RH de supermercado' para 'jornal de ofertas de supermercado'. Categorias de extracao: fato, preferencia, correcao, decisao, entidade. Dedup: cosine similarity > 0.85 contra ia_memorias.embedding. Eviction: se > 50 memorias auto, deleta a mais antiga. Compaction: se > 30K tokens estimados e > 10 msgs, resume msgs antigas via LLM. Cache resumo em ia_conversas.resumo_compactado. *** ATENCAO SPREAD vs ARRAY ***: CONVERTER TODAS as chamadas de query helpers de spread para array. EscalaFlow: insertReturningId(sql, conteudo, origem, embedding) -> JornalFlow: insertReturningId(sql, [conteudo, origem, embedding]). EscalaFlow: execute(sql, memoriaId) -> JornalFlow: execute(sql, [memoriaId]). EscalaFlow: queryAll(sql, conversaId) -> JornalFlow: queryAll(sql, [conversaId]).",
+            "files_to_modify": [],
+            "files_to_create": [
+              "src/main/ia/session-processor.ts"
+            ],
+            "patterns_from": [
+              "~/escalaflow/src/main/ia/session-processor.ts"
+            ],
+            "verification": {
+              "type": "typecheck",
+              "command": "npx tsc --noEmit -p tsconfig.node.json",
+              "expected": "No type errors"
+            },
+            "status": "pending"
+          },
+          {
+            "id": "subtask-4-3",
+            "description": "WIRE memories into discovery briefing + cliente.ts. WHAT: (1) Em discovery.ts, ativar a secao de memorias (que foi criada graceful em subtask-2-1): query ia_memorias ORDER BY atualizada_em DESC LIMIT 50, formatar como lista. (2) Em cliente.ts, importar maybeCompact de session-processor.ts e usar no buildChatMessages (onde antes retornava null). (3) Em tipc.ts, no handler ia.stream, apos mensagem final, chamar extractMemories em background (fire and forget, nao bloqueia response). WHERE: src/main/ia/discovery.ts, src/main/ia/cliente.ts, src/main/tipc.ts. HOW: discovery.ts: substituir try/catch placeholder por query real (SELECT id, conteudo FROM ia_memorias... com ARRAY params). cliente.ts: importar { maybeCompact } from './session-processor', remover stub null. tipc.ts: no handler ia.stream, apos return do iaEnviarMensagemStream, fazer extractMemories(...).catch(console.warn) (fire and forget). *** ATENCAO SPREAD vs ARRAY ***: Queries em discovery.ts DEVEM usar array params.",
+            "files_to_modify": [
+              "src/main/ia/discovery.ts",
+              "src/main/ia/cliente.ts",
+              "src/main/tipc.ts"
+            ],
+            "files_to_create": [],
+            "patterns_from": [
+              "~/escalaflow/src/main/ia/discovery.ts",
+              "~/escalaflow/src/main/ia/cliente.ts"
+            ],
+            "verification": {
+              "type": "typecheck",
+              "command": "npx tsc --noEmit -p tsconfig.node.json",
+              "expected": "No type errors"
+            },
+            "status": "pending"
+          },
+          {
+            "id": "subtask-4-4",
+            "description": "ADD memory IPC handlers + tools. WHAT: Adicionar handlers no tipc.ts: ia.memorias.listar, ia.memorias.salvar (manual), ia.memorias.remover. Adicionar tools no tools.ts: salvar_memoria (input: conteudo string), listar_memorias (sem input), remover_memoria (input: id). WHERE: src/main/tipc.ts, src/main/ia/tools.ts. HOW: Handlers fazem queries diretas no ia_memorias com ARRAY params. salvar_memoria: execute('INSERT INTO ia_memorias (conteudo, origem) VALUES ($1, $2)', ['manual', conteudo]). listar_memorias: queryAll('SELECT * FROM ia_memorias ORDER BY atualizada_em DESC', []). remover_memoria: execute('DELETE FROM ia_memorias WHERE id = $1', [id]). *** ATENCAO SPREAD vs ARRAY ***: SEMPRE array params.",
+            "files_to_modify": [
+              "src/main/tipc.ts",
+              "src/main/ia/tools.ts"
+            ],
+            "files_to_create": [],
+            "patterns_from": [
+              "~/escalaflow/src/main/ia/tools.ts"
+            ],
+            "verification": {
+              "type": "typecheck",
+              "command": "npx tsc --noEmit -p tsconfig.node.json",
+              "expected": "No type errors"
+            },
+            "status": "pending"
+          }
+        ]
+      },
+      {
+        "id": "phase-5",
+        "name": "Knowledge Graph",
+        "description": "Tabelas de entidades e relacoes, extracao via LLM, graph traversal com CTE recursivo, e enrichment no search.",
+        "depends_on": [
+          "phase-3"
+        ],
+        "subtasks": [
+          {
+            "id": "subtask-5-1",
+            "description": "ADD schema migration v6: knowledge_entities + knowledge_relations tables. WHAT: Adicionar migration version 6 com 2 tabelas. AMBAS usam 'id SERIAL PRIMARY KEY' (convencao tabelas novas). knowledge_entities: id SERIAL PK, nome TEXT, tipo TEXT, embedding vector(768), origem TEXT ('sistema'/'usuario'), valid_from TIMESTAMPTZ, valid_to TIMESTAMPTZ, UNIQUE(nome, tipo). knowledge_relations: id SERIAL PK, entity_from_id FK REFERENCES knowledge_entities(id), entity_to_id FK REFERENCES knowledge_entities(id), tipo_relacao TEXT, peso REAL, valid_from, valid_to. Indices em relations(entity_from_id) e relations(entity_to_id). WHERE: src/main/db/schema.ts. HOW: Adicionar entry {version: 6, up: SQL} ao MIGRATIONS array.",
+            "files_to_modify": [
+              "src/main/db/schema.ts"
+            ],
+            "files_to_create": [],
+            "patterns_from": [
+              "~/escalaflow/src/main/db/schema.ts"
+            ],
+            "verification": {
+              "type": "test",
+              "command": "npx vitest run tests/db/schema.test.ts",
+              "expected": "Migration v6 applies cleanly"
+            },
+            "status": "pending"
+          },
+          {
+            "id": "subtask-5-2",
+            "description": "CREATE graph.ts — entity extraction, merge, persist, rebuild, stats, explore. WHAT: Criar src/main/knowledge/graph.ts com exports: extractEntitiesFromChunk(chunkText, createModel, modelo), rebuildGraph(createModel, modelo, origem, onProgress?), exportGraphSeed(origem), importGraphSeed(seed, origem), graphStats(origem?), e re-export exploreRelations from search.ts. WHERE: src/main/knowledge/graph.ts. HOW: Port de ~/escalaflow/src/main/knowledge/graph.ts. Adaptar EXTRACTION_PROMPT de 'RH de supermercado' para 'jornal de ofertas de supermercado'. TIPOS DE ENTIDADE: produto, secao, categoria, marca, regra, conceito. TIPOS DE RELACAO: pertence_a, contem, substitui, compete_com, produzido_por, usado_em. Manter mergeExtractions e persistGraph identicos (domain-agnostic). *** ATENCAO SPREAD vs ARRAY ***: CONVERTER TODAS as chamadas de query helpers. EscalaFlow: queryAll(sql, origem) -> JornalFlow: queryAll(sql, [origem]). EscalaFlow: insertReturningId(sql, nome, tipo, embedding, origem) -> JornalFlow: insertReturningId(sql, [nome, tipo, embedding, origem]). EscalaFlow: execute(sql, fromId, toId, relacao, peso) -> JornalFlow: execute(sql, [fromId, toId, relacao, peso]). TODA chamada de query helper DEVE usar array params.",
+            "files_to_modify": [],
+            "files_to_create": [
+              "src/main/knowledge/graph.ts"
+            ],
+            "patterns_from": [
+              "~/escalaflow/src/main/knowledge/graph.ts"
+            ],
+            "verification": {
+              "type": "typecheck",
+              "command": "npx tsc --noEmit -p tsconfig.node.json",
+              "expected": "No type errors"
+            },
+            "status": "pending"
+          },
+          {
+            "id": "subtask-5-3",
+            "description": "WIRE graph enrichment into search.ts. WHAT: Garantir que search.ts chama getRelatedEntities (que ja foi portado na subtask-3-5 com graceful degradation). Se knowledge_entities table nao existir, retorna []. Se existir, busca entidades mencionadas nos chunks e suas relacoes. WHERE: src/main/knowledge/search.ts. HOW: Verificar que getRelatedEntities em search.ts tem try/catch e retorna [] se tabela nao existe. Se subtask-3-5 ja implementou isso, este subtask e apenas validacao. Se nao, adicionar try/catch. *** ATENCAO SPREAD vs ARRAY ***: Qualquer query adicionada DEVE usar array params.",
+            "files_to_modify": [
+              "src/main/knowledge/search.ts"
+            ],
+            "files_to_create": [],
+            "patterns_from": [
+              "~/escalaflow/src/main/knowledge/search.ts"
+            ],
+            "verification": {
+              "type": "typecheck",
+              "command": "npx tsc --noEmit -p tsconfig.node.json",
+              "expected": "No type errors"
+            },
+            "status": "pending"
+          },
+          {
+            "id": "subtask-5-4",
+            "description": "ADD graph IPC handlers + tools. WHAT: Adicionar handlers no tipc.ts: ia.graph.rebuild (chama rebuildGraph), ia.graph.stats (chama graphStats), ia.graph.explore (chama exploreRelations). Adicionar tool explorar_relacoes no tools.ts: input {entidade: string, profundidade?: number}, chama exploreRelations. WHERE: src/main/tipc.ts, src/main/ia/tools.ts. HOW: Handlers seguem pattern existente. rebuild handler deve aceitar createModel/modelo da config do DB (usar buildModelFactory). explore handler retorna entidades e relacoes formatadas. *** ATENCAO SPREAD vs ARRAY ***: SEMPRE array params nas queries.",
+            "files_to_modify": [
+              "src/main/tipc.ts",
+              "src/main/ia/tools.ts"
+            ],
+            "files_to_create": [],
+            "patterns_from": [
+              "~/escalaflow/src/main/ia/tools.ts"
+            ],
+            "verification": {
+              "type": "typecheck",
+              "command": "npx tsc --noEmit -p tsconfig.node.json",
+              "expected": "No type errors"
+            },
+            "status": "pending"
+          }
+        ]
+      },
+      {
+        "id": "phase-6",
+        "name": "Tools V2",
+        "description": "Migrar todas as 16 tools existentes para pattern 3-status, adicionar novas tools inteligentes, e implementar discovery design.",
+        "depends_on": [
+          "phase-2",
+          "phase-3"
+        ],
+        "subtasks": [
+          {
+            "id": "subtask-6-1",
+            "description": "REFACTOR existing 16 tools to pattern 3-status. WHAT: Migrar todas as 16 tools existentes de formato ad-hoc ({found:bool}, {success:bool}) para pattern 3-status padrao: {status: 'ok'|'vazio'|'erro', summary: string, data: any, _meta?: {tool_name, elapsed_ms, count?}}. AS 16 TOOLS REAIS (nomes exatos do codebase em tools.ts): (1) buscar_produtos, (2) ver_produto, (3) cadastrar_produto, (4) atualizar_produto, (5) listar_imagens, (6) definir_imagem_default, (7) buscar_jornal_atual, (8) status_importacao, (9) trocar_item, (10) atualizar_item, (11) buscar_historico, (12) comparar_precos, (13) listar_secoes, (14) adicionar_secao, (15) revisar_planilha, (16) stats_banco. Para cada tool: wrap o resultado existente em {status, summary, data}. Adicionar _meta com timing (const start = Date.now()... elapsed_ms: Date.now()-start). Manter backward compat nos Zod schemas (input nao muda). WHERE: src/main/ia/tools.ts. HOW: Criar helper function toolResult(status, summary, data, meta?) que formata. Envolver cada tool execute com try/catch que retorna {status: 'erro', summary: err.message}. Seguir pattern de ~/escalaflow/src/main/ia/tools.ts.",
+            "files_to_modify": [
+              "src/main/ia/tools.ts"
+            ],
+            "files_to_create": [],
+            "patterns_from": [
+              "~/escalaflow/src/main/ia/tools.ts"
+            ],
+            "verification": {
+              "type": "test",
+              "command": "npm test",
+              "expected": "All existing tests still pass (tool outputs changed format but tests should adapt)"
+            },
+            "status": "pending"
+          },
+          {
+            "id": "subtask-6-2",
+            "description": "ADD new tool: sugerir_produtos. WHAT: Tool que sugere produtos para preencher uma secao do jornal. Input: {secao_slug?: string, categoria?: string, limite?: number}. Logica: busca produtos com imagem que NAO estao no jornal atual, filtra por categoria/secao, ordena por frequencia de uso em jornais anteriores. Retorna lista de sugestoes com 3-status. WHERE: src/main/ia/tools.ts. HOW: Query JOIN produtos + produto_imagens + jornal_itens. Filtrar produtos ativos, com pelo menos 1 imagem, que nao estao em nenhum jornal_itens do jornal em foco.",
+            "files_to_modify": [
+              "src/main/ia/tools.ts"
+            ],
+            "files_to_create": [],
+            "patterns_from": [],
+            "verification": {
+              "type": "typecheck",
+              "command": "npx tsc --noEmit -p tsconfig.node.json",
+              "expected": "No type errors"
+            },
+            "status": "pending"
+          },
+          {
+            "id": "subtask-6-3",
+            "description": "ADD new tools: analisar_mix + comparar_jornais. WHAT: (1) analisar_mix: analisa o mix de produtos de um jornal — distribuicao por categoria, secoes vazias, produtos repetidos entre secoes, produtos sem imagem. Input: {jornal_id: number}. (2) comparar_jornais: compara 2 jornais — produtos em comum, novos, removidos, mudancas de preco. Input: {jornal_id_a: number, jornal_id_b: number}. Ambos retornam 3-status. WHERE: src/main/ia/tools.ts. HOW: Queries de analise. analisar_mix: GROUP BY categoria, COUNT por secao, detectar duplicados. comparar_jornais: LEFT JOIN entre itens dos 2 jornais, calcular delta de precos.",
+            "files_to_modify": [
+              "src/main/ia/tools.ts"
+            ],
+            "files_to_create": [],
+            "patterns_from": [],
+            "verification": {
+              "type": "typecheck",
+              "command": "npx tsc --noEmit -p tsconfig.node.json",
+              "expected": "No type errors"
+            },
+            "status": "pending"
+          },
+          {
+            "id": "subtask-6-4",
+            "description": "ADD new tools: diagnosticar_jornal + exportar_relatorio. WHAT: (1) diagnosticar_jornal: analise completa de um jornal — secoes vazias, itens com fallback (sem imagem matched), precos zerados, secoes com poucos itens vs grid size, importacao stats. Input: {jornal_id: number}. Retorna alertas categorizados (critical/warning/info). (2) exportar_relatorio: gera um relatorio consolidado de um jornal com: lista de produtos por secao, precos, status de imagem, comparativo com jornal anterior se existir. Input: {jornal_id: number, incluir_comparativo?: boolean}. Retorna relatorio formatado com 3-status. NOTA: sugerir_precos foi REMOVIDO desta subtask porque a tool existente 'comparar_precos' (ja no codebase) ja faz consulta de historico de precos. Se necessario, comparar_precos pode ser estendida na subtask 6-1 para incluir min/max/avg/suggested_range no refactor para 3-status. WHERE: src/main/ia/tools.ts. HOW: diagnosticar_jornal: queries em jornal_secoes, jornal_itens, importacoes. exportar_relatorio: queries consolidadas + formatacao de relatorio. Ambos 3-status.",
+            "files_to_modify": [
+              "src/main/ia/tools.ts"
+            ],
+            "files_to_create": [],
+            "patterns_from": [],
+            "verification": {
+              "type": "typecheck",
+              "command": "npx tsc --noEmit -p tsconfig.node.json",
+              "expected": "No type errors"
+            },
+            "status": "pending"
+          },
+          {
+            "id": "subtask-6-5",
+            "description": "WIRE discovery design in system prompt. WHAT: Atualizar sistema-prompt.ts para incluir guia de discovery design: tools de entrada (buscar_produtos, listar_secoes, diagnosticar_jornal, stats_banco, buscar_jornal_atual) que dao visao geral, e tools de detalhe (ver_produto, sugerir_produtos, comparar_jornais, comparar_precos, analisar_mix, exportar_relatorio) que aprofundam. Tools de acao (cadastrar_produto, atualizar_produto, trocar_item, atualizar_item, adicionar_secao, definir_imagem_default). Tools de knowledge (buscar_conhecimento, salvar_memoria, explorar_relacoes). Adicionar tabela de quando usar cada tool, como combinar tools em workflows. WHERE: src/main/ia/sistema-prompt.ts. HOW: Adicionar secao '## 4) Tools — Guia de Uso Inteligente' no system prompt com tabelas de tools agrupadas por funcao (Descobrir, Analisar, Criar, Gerenciar Knowledge).",
+            "files_to_modify": [
+              "src/main/ia/sistema-prompt.ts"
+            ],
+            "files_to_create": [],
+            "patterns_from": [
+              "~/escalaflow/src/main/ia/system-prompt.ts"
+            ],
+            "verification": {
+              "type": "typecheck",
+              "command": "npx tsc --noEmit -p tsconfig.node.json",
+              "expected": "No type errors"
+            },
+            "status": "pending"
+          }
+        ]
+      }
+    ],
+    "global_warnings": {
+      "spread_vs_array_params": "CRITICAL: EscalaFlow query helpers use SPREAD params (queryOne(sql, ...params)) while JornalFlow uses ARRAY params (queryOne(sql, params[])). When porting ANY code from EscalaFlow, EVERY call to queryOne, queryAll, execute, insertReturningId MUST be converted from spread to array style. Example: EscalaFlow insertReturningId(sql, a, b, c) -> JornalFlow insertReturningId(sql, [a, b, c]). This affects ALL subtasks in phases 3, 4, 5 that port knowledge layer code. Failing to convert will cause silent failures or wrong query results.",
+      "new_table_pk_convention": "All NEW tables created in this feature use 'id' as primary key column name (SERIAL for numeric, TEXT for UUIDs). Existing JornalFlow tables retain their current naming (produto_id, jornal_id, etc.). insertReturningId defaults to 'id' but accepts optional column name override.",
+      "ipc_listener_cleanup": "All ipcRenderer.on() listeners in the frontend MUST have cleanup functions that remove them on component unmount and before starting new streams. Use the unsubscribe callback returned by on(). Failure to clean up = memory leaks."
+    },
+    "summary": {
+      "total_phases": 6,
+      "total_subtasks": 33,
+      "estimated_complexity": "high",
+      "dependency_graph": "Phase 1 (Infra) is independent. Phase 2 (Discovery) depends on Phase 1. Phase 3 (Knowledge) depends on Phase 1. Phase 4 (Memory) depends on Phase 3 (needs embeddings). Phase 5 (Graph) depends on Phase 3 (needs knowledge tables). Phase 6 (Tools V2) depends on Phase 2 + Phase 3.",
+      "critical_path": "Phase 1 -> Phase 3 -> Phase 4 (blocking chain for full intelligence stack)",
+      "parallel_work": "Phase 2 and Phase 3 can run in parallel after Phase 1. Phase 4 and Phase 5 can run in parallel after Phase 3.",
+      "new_npm_dependencies": [
+        "@openrouter/ai-sdk-provider (multi-provider access)",
+        "@huggingface/transformers (offline embeddings ONNX)"
+      ],
+      "changes_from_v1": [
+        "subtask-1-1: Expanded PGlite.create() migration guidance with explicit steps, CREATE EXTENSION placement, and test strategy",
+        "subtask-1-2: insertReturningId uses ARRAY params (JornalFlow convention) + optional returningColumn param for non-'id' PKs",
+        "subtask-1-3: Clarified TEXT id tables won't use insertReturningId, use queryOne/execute with RETURNING directly",
+        "subtask-1-4: IaMensagem clarified as NEW type (not replacement), ADD without removing existing inline types",
+        "subtask-1-6: SPLIT into 1-6a (core generateText client) + 1-6b (streaming client)",
+        "subtask-1-7: SPLIT into 1-7a (streaming + config handlers) + 1-7b (conversation CRUD handlers)",
+        "subtask-1-9: Added explicit ipcRenderer listener cleanup requirements to prevent memory leaks",
+        "subtask-1-10: Added listener cleanup guidance",
+        "subtask-3-2: MERGED with subtask-3-3 (chunking code + tests together, TDD style, only 57 lines)",
+        "subtask-3-3: Now embeddings.ts (was subtask-3-4). Added model storage path, download strategy, ONNX compat notes",
+        "subtask-3-4: Now ingest.ts (was subtask-3-5). Added SPREAD vs ARRAY conversion warning with examples",
+        "subtask-3-5: Now search.ts (was subtask-3-6). Added SPREAD vs ARRAY conversion warning with examples",
+        "subtask-3-6: Now seed-knowledge (was subtask-3-7). Added SPREAD vs ARRAY warning",
+        "subtask-3-7: Now knowledge IPC (was subtask-3-8). Added SPREAD vs ARRAY warning",
+        "subtask-4-2: Added SPREAD vs ARRAY conversion warning with specific examples from session-processor",
+        "subtask-4-3: Added SPREAD vs ARRAY warning",
+        "subtask-4-4: Added SPREAD vs ARRAY warning with example code",
+        "subtask-5-2: Added SPREAD vs ARRAY conversion warning with specific examples from graph.ts",
+        "subtask-5-3: Added SPREAD vs ARRAY warning",
+        "subtask-5-4: Added SPREAD vs ARRAY warning",
+        "subtask-6-1: FIXED tool names to match actual 16 tools in codebase: buscar_produtos, ver_produto, cadastrar_produto, atualizar_produto, listar_imagens, definir_imagem_default, buscar_jornal_atual, status_importacao, trocar_item, atualizar_item, buscar_historico, comparar_precos, listar_secoes, adicionar_secao, revisar_planilha, stats_banco",
+        "subtask-6-4: REPLACED sugerir_precos with exportar_relatorio (comparar_precos already handles price history)",
+        "subtask-6-5: Updated tool groupings to use correct tool names"
+      ],
+      "escalaflow_reference_index": {
+        "config.ts": "~/escalaflow/src/main/ia/config.ts (105 lines) — subtask 1-5",
+        "cliente.ts": "~/escalaflow/src/main/ia/cliente.ts (775 lines) — subtasks 1-6a + 1-6b",
+        "discovery.ts": "~/escalaflow/src/main/ia/discovery.ts (535 lines) — subtask 2-1",
+        "system-prompt.ts": "~/escalaflow/src/main/ia/system-prompt.ts (565 lines) — subtask 2-2",
+        "session-processor.ts": "~/escalaflow/src/main/ia/session-processor.ts (224 lines) — subtask 4-2",
+        "chunking.ts": "~/escalaflow/src/main/knowledge/chunking.ts (57 lines) — subtask 3-2",
+        "embeddings.ts": "~/escalaflow/src/main/knowledge/embeddings.ts (98 lines) — subtask 3-3",
+        "ingest.ts": "~/escalaflow/src/main/knowledge/ingest.ts (85 lines) — subtask 3-4",
+        "search.ts": "~/escalaflow/src/main/knowledge/search.ts (350 lines) — subtask 3-5",
+        "graph.ts": "~/escalaflow/src/main/knowledge/graph.ts (373 lines) — subtask 5-2",
+        "schema.ts": "~/escalaflow/src/main/db/schema.ts — subtasks 1-3, 3-1, 4-1, 5-1",
+        "types.ts": "~/escalaflow/src/shared/types.ts — subtask 1-4",
+        "query.ts": "~/escalaflow/src/main/db/query.ts — subtask 1-2 (NOTE: uses SPREAD params, JornalFlow uses ARRAY)"
+      }
+    }
+  },
+  "completed_at": "2026-03-12T06:00:00Z"
+}

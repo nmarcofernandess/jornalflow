@@ -122,9 +122,9 @@ describe('IA tools — extended (7 new tools)', () => {
       { item_id, novo_produto_id: produtoB_id },
       mockOptions
     )
-    expect(result.success).toBe(true)
-    expect(result.novo_produto!.produto_id).toBe(produtoB_id)
-    expect(result.novo_produto!.nome).toBe('FEIJAO CARIOCA 1KG')
+    expect(result.status).toBe('ok')
+    expect(result.data.novo_produto.produto_id).toBe(produtoB_id)
+    expect(result.data.novo_produto.nome).toBe('FEIJAO CARIOCA 1KG')
   })
 
   it('trocar_item should fail for nonexistent item', async () => {
@@ -132,8 +132,8 @@ describe('IA tools — extended (7 new tools)', () => {
       { item_id: 99999, novo_produto_id: produtoB_id },
       mockOptions
     )
-    expect(result.success).toBe(false)
-    expect(result.error).toBe('Item não encontrado')
+    expect(result.status).toBe('erro')
+    expect(result.summary).toContain('não encontrado')
   })
 
   it('trocar_item should fail for nonexistent product', async () => {
@@ -141,8 +141,8 @@ describe('IA tools — extended (7 new tools)', () => {
       { item_id, novo_produto_id: 99999 },
       mockOptions
     )
-    expect(result.success).toBe(false)
-    expect(result.error).toBe('Produto não encontrado')
+    expect(result.status).toBe('erro')
+    expect(result.summary).toContain('não encontrado')
   })
 
   // --- atualizar_item ---
@@ -151,9 +151,9 @@ describe('IA tools — extended (7 new tools)', () => {
       { item_id, preco_oferta: 9.99, preco_clube: 8.49 },
       mockOptions
     )
-    expect(result.success).toBe(true)
-    expect(result.atualizado).toContain('preco_oferta')
-    expect(result.atualizado).toContain('preco_clube')
+    expect(result.status).toBe('ok')
+    expect(result.data.atualizado).toContain('preco_oferta')
+    expect(result.data.atualizado).toContain('preco_clube')
   })
 
   it('atualizar_item should fail for nonexistent item', async () => {
@@ -161,8 +161,8 @@ describe('IA tools — extended (7 new tools)', () => {
       { item_id: 99999, preco_oferta: 5.00 },
       mockOptions
     )
-    expect(result.success).toBe(false)
-    expect(result.error).toBe('Item não encontrado')
+    expect(result.status).toBe('erro')
+    expect(result.summary).toContain('não encontrado')
   })
 
   it('atualizar_item should fail when no fields provided', async () => {
@@ -170,24 +170,24 @@ describe('IA tools — extended (7 new tools)', () => {
       { item_id },
       mockOptions
     )
-    expect(result.success).toBe(false)
-    expect(result.error).toBe('Nenhum campo para atualizar')
+    expect(result.status).toBe('erro')
+    expect(result.summary).toContain('Nenhum campo')
   })
 
   // --- buscar_historico ---
   it('buscar_historico should return journals ordered by date', async () => {
     const result = await iaTools.buscar_historico.execute({}, mockOptions)
-    expect(result.found).toBe(true)
-    expect(result.total).toBeGreaterThanOrEqual(2)
+    expect(result.status).toBe('ok')
+    expect(result.data.total).toBeGreaterThanOrEqual(2)
     // Most recent first
-    const datas = result.jornais!.map((j: any) => j.data_inicio)
+    const datas = result.data.jornais.map((j: any) => j.data_inicio)
     expect(datas[0] >= datas[1]).toBe(true)
   })
 
   it('buscar_historico should respect limite', async () => {
     const result = await iaTools.buscar_historico.execute({ limite: 1 }, mockOptions)
-    expect(result.found).toBe(true)
-    expect(result.total).toBe(1)
+    expect(result.status).toBe('ok')
+    expect(result.data.total).toBe(1)
   })
 
   // --- comparar_precos ---
@@ -196,14 +196,14 @@ describe('IA tools — extended (7 new tools)', () => {
       { produto_id: produtoA_id },
       mockOptions
     )
-    expect(result.found).toBe(true)
-    expect(result.total_edicoes).toBeGreaterThanOrEqual(1)
-    expect(result.historico!.length).toBeGreaterThanOrEqual(1)
-    expect(result.historico![0]).toHaveProperty('preco_oferta')
-    expect(result.historico![0]).toHaveProperty('data_inicio')
+    expect(result.status).toBe('ok')
+    expect(result.data.total_edicoes).toBeGreaterThanOrEqual(1)
+    expect(result.data.historico.length).toBeGreaterThanOrEqual(1)
+    expect(result.data.historico[0]).toHaveProperty('preco_oferta')
+    expect(result.data.historico[0]).toHaveProperty('data_inicio')
   })
 
-  it('comparar_precos should return not found for product never in journal', async () => {
+  it('comparar_precos should return vazio for product never in journal', async () => {
     // produtoB was swapped IN but let's create a fresh one never used
     const prodC = await criarProduto({
       codigo: 'EXT003',
@@ -214,8 +214,8 @@ describe('IA tools — extended (7 new tools)', () => {
       { produto_id: prodC.produto_id },
       mockOptions
     )
-    expect(result.found).toBe(false)
-    expect(result.message).toContain('nunca apareceu')
+    expect(result.status).toBe('vazio')
+    expect(result.summary).toContain('nunca apareceu')
   })
 
   it('comparar_precos should fail for nonexistent product', async () => {
@@ -223,17 +223,17 @@ describe('IA tools — extended (7 new tools)', () => {
       { produto_id: 99999 },
       mockOptions
     )
-    expect(result.found).toBe(false)
-    expect(result.error).toBe('Produto não encontrado')
+    expect(result.status).toBe('erro')
+    expect(result.summary).toContain('não encontrado')
   })
 
   // --- listar_secoes ---
   it('listar_secoes should return sections of current draft', async () => {
     const result = await iaTools.listar_secoes.execute({}, mockOptions)
-    expect(result.found).toBe(true)
-    expect(result.jornal_id).toBe(jornal_id)
-    expect(result.total_secoes).toBeGreaterThanOrEqual(1)
-    const secao = result.secoes!.find((s: any) => s.nome === 'Ofertas Teste')
+    expect(result.status).toBe('ok')
+    expect(result.data.jornal_id).toBe(jornal_id)
+    expect(result.data.total_secoes).toBeGreaterThanOrEqual(1)
+    const secao = result.data.secoes.find((s: any) => s.nome === 'Ofertas Teste')
     expect(secao).toBeDefined()
     expect(secao!.grid).toBe('3x3')
   })
@@ -244,9 +244,9 @@ describe('IA tools — extended (7 new tools)', () => {
       { jornal_id, pagina_numero: 1, nome: 'Hortifruti Extra', grid_cols: 4, grid_rows: 2 },
       mockOptions
     )
-    expect(result.success).toBe(true)
-    expect(result.secao!.nome).toBe('Hortifruti Extra')
-    expect(result.secao!.grid).toBe('4x2')
+    expect(result.status).toBe('ok')
+    expect(result.data.secao.nome).toBe('Hortifruti Extra')
+    expect(result.data.secao.grid).toBe('4x2')
   })
 
   it('adicionar_secao should fail for nonexistent page', async () => {
@@ -254,17 +254,18 @@ describe('IA tools — extended (7 new tools)', () => {
       { jornal_id, pagina_numero: 99, nome: 'Inexistente' },
       mockOptions
     )
-    expect(result.success).toBe(false)
-    expect(result.error).toContain('não encontrada')
+    expect(result.status).toBe('erro')
+    expect(result.summary).toContain('não encontrada')
   })
 
   // --- stats_banco ---
   it('stats_banco should return catalog statistics', async () => {
     const result = await iaTools.stats_banco.execute({}, mockOptions)
-    expect(result.produtos_ativos).toBeGreaterThanOrEqual(3) // EXT001, EXT002, EXT003
-    expect(result.total_jornais).toBeGreaterThanOrEqual(2)
-    expect(result.jornais_rascunho).toBeGreaterThanOrEqual(1)
-    expect(typeof result.total_imagens).toBe('number')
-    expect(typeof result.produtos_com_imagem).toBe('number')
+    expect(result.status).toBe('ok')
+    expect(result.data.produtos_ativos).toBeGreaterThanOrEqual(3) // EXT001, EXT002, EXT003
+    expect(result.data.total_jornais).toBeGreaterThanOrEqual(2)
+    expect(result.data.jornais_rascunho).toBeGreaterThanOrEqual(1)
+    expect(typeof result.data.total_imagens).toBe('number')
+    expect(typeof result.data.produtos_com_imagem).toBe('number')
   })
 })

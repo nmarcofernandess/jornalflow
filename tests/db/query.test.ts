@@ -5,7 +5,7 @@ import { queryAll, queryOne, execute, transaction } from '../../src/main/db/quer
 describe('database', () => {
   beforeAll(async () => {
     await getDb() // in-memory for tests
-  })
+  }, 30000)
 
   afterAll(async () => {
     await closeDb()

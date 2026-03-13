@@ -1,0 +1,178 @@
+{
+  "status": "approved",
+  "qa_result": {
+    "tests": {
+      "unit": "pass",
+      "typecheck": "pass",
+      "integration": "skipped",
+      "details": {
+        "unit_summary": "193/193 tests passing across 19 test files. Includes: tools.test.ts (11 tests), tools-extended.test.ts (15 tests), config.test.ts (26 tests), cliente.test.ts (26 tests), chunking.test.ts (14 tests), plus all pre-existing tests.",
+        "typecheck_summary": "Only 3 pre-existing errors in src/main/tipc.ts lines 182-185 (RevisaoIA type mismatch). Zero new TS errors introduced by this work.",
+        "lint_summary": "189 errors: 118 explicit-function-return-type, 57 no-explicit-any, 8 no-unused-vars, 3 react-refresh. All are pre-existing patterns in the codebase — no new code-specific lint issues in IA/knowledge files."
+      }
+    },
+    "code_review": {
+      "security": "pass",
+      "patterns": "pass",
+      "quality": "pass",
+      "details": {
+        "security": {
+          "eval_usage": "None found in src/main/ia/ or src/main/knowledge/",
+          "hardcoded_secrets": "None. API keys resolved from DB (configuracao_ia table) or .env.local (loadEnvLocal in index.ts, gitignored)",
+          "input_validation": "All tools use Zod schemas for input validation. SQL queries use parameterized $1/$2 style consistently.",
+          "auth_checks": "N/A — desktop Electron app, single user"
+        },
+        "patterns": {
+          "array_params": "PASS. All queryAll/queryOne/execute/insertReturningId calls in knowledge/, ia/ use array params [p1, p2]. Zero spread params found.",
+          "three_status_pattern": "PASS. All 26 tools use toolResult() helper consistently. Each tool returns {status: 'ok'|'vazio'|'erro', summary, data, _meta}.",
+          "graceful_degradation": "PASS. All knowledge modules (embeddings, search, ingest, graph) wrap operations in try/catch and return null/empty on failure. session-processor.ts same pattern. discovery.ts wraps all sub-functions in try/catch returning null.",
+          "naming_conventions": "PASS. Portuguese naming consistent with codebase: papel, conteudo, criada_em, atualizada_em. New tables follow existing pattern (ia_conversas, ia_mensagens, ia_memorias, knowledge_sources, etc.).",
+          "file_organization": "PASS. New files follow existing structure: src/main/ia/ for IA logic, src/main/knowledge/ for knowledge layer, src/main/db/ for schema/queries, src/shared/types.ts for shared types, tests/ mirroring src/ structure.",
+          "domain_adaptation": "PASS. Zero EscalaFlow domain references found (searched for: escala, colaborador, setor, CLT, RH, turnos, demanda, alocac, escalaflow). All prompts reference 'jornal de ofertas de supermercado'."
+        },
+        "quality": {
+          "console_debugging": "PASS. All console.log statements in new code use structured prefixes ([AI SDK:...], [embeddings], [graph], [seed-knowledge], [session-processor]) — operational logging, not debugging residuals.",
+          "commented_out_code": "PASS. No commented-out code found in new files.",
+          "error_handling": "PASS. All async operations in tools, knowledge layer, session-processor use try/catch with error propagation or graceful degradation. Tools return toolResult('erro', ...) on failure. Knowledge modules return null/empty arrays.",
+          "edge_cases": "PASS. Handles: empty search results (vazio status), missing DB tables (graceful skip), missing embedding model (fallback to keyword search), missing knowledge graph (empty relations), tool calls with no final text (follow-up pattern), history compaction threshold checks, dedup by cosine similarity."
+        }
+      }
+    },
+    "requirements_check": {
+      "all_requirements_met": true,
+      "details": {
+        "phase_1_infra": {
+          "status": "complete",
+          "items": [
+            "PGlite.create() with vector + pg_trgm extensions (database.ts)",
+            "Schema migrations v3-v6 (configuracao_ia, ia_conversas, ia_mensagens, knowledge_sources, knowledge_chunks, ia_memorias, knowledge_entities, knowledge_relations)",
+            "insertReturningId() helper (query.ts)",
+            "Multi-provider config: Gemini + OpenRouter with factory pattern (config.ts)",
+            "Streaming via streamText + BrowserWindow broadcast (cliente.ts)",
+            "Follow-up pattern when tools produce no final text (cliente.ts)",
+            "Tool result truncation with TOOL_RESULT_MAX_CHARS=1500 (cliente.ts)",
+            "Conversation persistence via ia_conversas + ia_mensagens tables",
+            "IPC handlers: ia.stream, ia.config.*, ia_conversas.*, ia_mensagens.* (tipc.ts)",
+            "Frontend streaming integration: iaStore with streaming state, IaChatPanel with real-time indicators",
+            "Backward compatibility: chat() legacy export, legacy ia.chat/ia.set_api_key/ia.get_api_key handlers preserved"
+          ]
+        },
+        "phase_2_discovery": {
+          "status": "complete",
+          "items": [
+            "buildContextBriefing() with auto-inject of DB context (discovery.ts)",
+            "Context sections: resumo global, secoes template, jornal em foco, alertas proativos, memorias, auto-RAG, stats knowledge, dica pagina",
+            "System prompt enriched from 17 lines to 298 lines with 8 sections (sistema-prompt.ts)",
+            "Context injection in buildFullSystemPrompt() (cliente.ts)"
+          ]
+        },
+        "phase_3_knowledge": {
+          "status": "complete",
+          "items": [
+            "Chunking with recursive text splitter (chunking.ts, 57 lines)",
+            "Offline embeddings via @huggingface/transformers Xenova/multilingual-e5-base (embeddings.ts)",
+            "Ingestion pipeline: source -> chunk -> embed -> FTS (ingest.ts)",
+            "Hybrid search: 70% vector + 30% FTS + trigram + importance boost + lazy decay (search.ts)",
+            "Seed knowledge: 4 markdown docs inlined (seed-knowledge.ts)",
+            "buscar_conhecimento tool registered in iaTools",
+            "IPC handlers: ia.knowledge.search, ia.knowledge.ingest, ia.knowledge.list"
+          ]
+        },
+        "phase_4_memory": {
+          "status": "complete",
+          "items": [
+            "ia_memorias table with embedding column (migration v5)",
+            "extractMemories: auto memory extraction from conversations via LLM (session-processor.ts)",
+            "maybeCompact: history compaction when > 30K tokens (session-processor.ts)",
+            "Dedup by cosine similarity > 0.85 (session-processor.ts)",
+            "Eviction: oldest auto memories deleted when > 50 limit",
+            "Memory tools: salvar_memoria, listar_memorias, remover_memoria",
+            "IPC handlers: ia.memorias.listar, ia.memorias.salvar, ia.memorias.remover",
+            "Fire-and-forget extractMemories call in ia.stream handler (tipc.ts)"
+          ]
+        },
+        "phase_5_knowledge_graph": {
+          "status": "complete",
+          "items": [
+            "knowledge_entities + knowledge_relations tables (migration v6)",
+            "Entity extraction via LLM generateObject with Zod schema (graph.ts)",
+            "Merge/dedup of extracted entities and relations (graph.ts)",
+            "Persist with ON CONFLICT handling (graph.ts)",
+            "Graph enrichment in search results (search.ts getRelatedEntities)",
+            "CTE recursive traversal for graph exploration (search.ts exploreRelations)",
+            "rebuildGraph orchestrator with progress callbacks (graph.ts)",
+            "graphStats for quick overview (graph.ts)",
+            "exportGraphSeed/importGraphSeed for pre-computed seeds (graph.ts)",
+            "explorar_relacoes tool registered in iaTools",
+            "IPC handlers: ia.graph.rebuild, ia.graph.stats, ia.graph.explore"
+          ]
+        },
+        "phase_6_tools_v2": {
+          "status": "complete",
+          "items": [
+            "toolResult() helper for 3-status pattern (tools.ts)",
+            "All 16 existing tools migrated to 3-status (buscar_produtos, ver_produto, cadastrar_produto, atualizar_produto, listar_imagens, definir_imagem_default, buscar_jornal_atual, status_importacao, trocar_item, atualizar_item, buscar_historico, comparar_precos, listar_secoes, adicionar_secao, revisar_planilha, stats_banco)",
+            "10 new tools added: buscar_conhecimento, salvar_memoria, listar_memorias, remover_memoria, explorar_relacoes, sugerir_produtos, analisar_mix, comparar_jornais, diagnosticar_jornal, exportar_relatorio",
+            "Total: 26 tools all using consistent 3-status pattern",
+            "sistema-prompt.ts updated with 4-category tool organization (Descobrir/Analisar/Criar/Gerenciar Knowledge)",
+            "Tests updated to assert against 3-status format"
+          ]
+        }
+      }
+    },
+    "issues": [],
+    "suggestions": [
+      {
+        "file": "src/main/ia/cliente.ts",
+        "description": "The deprecated chat() legacy export and backward-compat code (lines 792-814) could be removed once all consumers are migrated to iaEnviarMensagem(). Consider adding a TODO to track this cleanup."
+      },
+      {
+        "file": "src/main/ia/config.ts",
+        "description": "The deprecated legacy functions (setApiKey, getApiKey, getProvider, getModel at lines 136-161) are still exported for backward compat. tipc.ts still uses them at ia.set_api_key and ia.get_api_key handlers. These can be cleaned up once the frontend settings page is fully migrated to ia.config.save/get."
+      },
+      {
+        "file": "src/renderer/src/store/iaStore.ts",
+        "description": "IaStoreMessage has deprecated 'role' and 'content' fields for backward compat (lines 10-14). The comment says subtask-1-10 should remove these. Consider a follow-up cleanup task."
+      },
+      {
+        "file": "src/main/knowledge/embeddings.ts",
+        "description": "The model path resolution (resolveModelPath) falls back to process.cwd() + '/models/embeddings' in dev. The model files (~150-440MB) need to be downloaded separately. Consider adding a first-run check or documentation note."
+      },
+      {
+        "file": "src/main/knowledge/graph.ts",
+        "description": "rebuildGraph processes chunks sequentially (1 LLM call per chunk, max 100 chunks). For large knowledge bases, this could be slow. Consider batch processing or parallelism in a future iteration."
+      }
+    ],
+    "tool_count_verification": {
+      "expected": "15 existing + ~10 new = ~25-26",
+      "actual": 26,
+      "existing_migrated": 16,
+      "new_added": 10,
+      "all_use_toolResult": true,
+      "tool_names": [
+        "buscar_produtos", "ver_produto", "cadastrar_produto", "atualizar_produto",
+        "listar_imagens", "definir_imagem_default", "buscar_jornal_atual", "status_importacao",
+        "trocar_item", "atualizar_item", "buscar_historico", "comparar_precos",
+        "listar_secoes", "adicionar_secao", "revisar_planilha", "stats_banco",
+        "buscar_conhecimento", "salvar_memoria", "listar_memorias", "remover_memoria",
+        "explorar_relacoes", "sugerir_produtos", "analisar_mix", "comparar_jornais",
+        "diagnosticar_jornal", "exportar_relatorio"
+      ]
+    },
+    "test_coverage": {
+      "new_test_files": [
+        "tests/ia/config.test.ts (26 tests — PROVIDER_DEFAULTS, resolveModel, isValidModelForProvider, resolveProviderApiKey, buildModelFactory)",
+        "tests/ia/cliente.test.ts (26 tests — normalizeToolArgs, buildChatMessages, extractToolCallsFromSteps, buildFullSystemPrompt)",
+        "tests/knowledge/chunking.test.ts (14 tests — empty, single, paragraph/newline/sentence split, overlap, defaults, edge cases)"
+      ],
+      "updated_test_files": [
+        "tests/ia/tools.test.ts (11 tests — migrated assertions to 3-status format)",
+        "tests/ia/tools-extended.test.ts (15 tests — migrated assertions to 3-status format)"
+      ],
+      "total_new_tests": 66,
+      "total_tests": 193
+    },
+    "verdict": "APPROVED"
+  },
+  "completed_at": "2026-03-13T02:00:00Z"
+}

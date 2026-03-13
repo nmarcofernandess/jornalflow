@@ -1,0 +1,82 @@
+{
+  "status": "complete",
+  "findings": {
+    "relevant_files": {
+      "reference_instaflow": [
+        "~/instaflow/src/main/ia/vision.ts",
+        "~/instaflow/src/main/ia/config.ts"
+      ],
+      "main_process_new": [
+        "src/main/ia/vision.ts",
+        "src/main/ia/batch-vision.ts"
+      ],
+      "main_process_modify": [
+        "src/main/tipc.ts",
+        "src/main/ia/tools.ts"
+      ],
+      "main_process_read": [
+        "src/main/ia/cliente.ts",
+        "src/main/ia/config.ts",
+        "src/main/servicos/imagens.ts",
+        "src/main/servicos/produtos.ts",
+        "src/main/import/batch-images.ts"
+      ],
+      "renderer_new": [
+        "src/renderer/src/paginas/VisionRevisaoPagina.tsx",
+        "src/renderer/src/servicos/vision.ts"
+      ],
+      "renderer_modify": [
+        "src/renderer/src/App.tsx",
+        "src/renderer/src/componentes/AppSidebar.tsx"
+      ],
+      "shared_modify": [
+        "src/shared/types.ts"
+      ]
+    },
+    "patterns": [
+      "Vision call pattern (InstaFlow): generateText() from 'ai' SDK with messages=[{role:'user', content:[{type:'image', image:'data:mime;base64,...'}, {type:'text', text:PROMPT}]}], maxTokens:1000. JSON response cleaned with .replace(/```json/g, '') before JSON.parse(). Fallback object returned on parse failure.",
+      "buildModelFactory() in src/main/ia/config.ts is the single entry point for all AI calls — returns {createModel, modelo} or null if no API key. vision.ts must call this exactly the same way, NOT import createGoogleGenerativeAI directly.",
+      "3-status tool result pattern in tools.ts: toolResult(status: 'ok'|'vazio'|'erro', summary: string, data: any, meta?: {tool_name, elapsed_ms, count?}). Every new IA tool must use this function.",
+      "IPC handler pattern in tipc.ts: t.procedure.input<TypeLiteral>().action(async ({input}) => { ... }). Dynamic imports used for heavy modules (export, ia). New handlers follow same key naming: 'vision.analisar', 'vision.batch'.",
+      "Progress events for long operations: broadcastToRenderer(channel, data) from src/main/ia/cliente.ts sends arbitrary events to all BrowserWindows. The batch-images import does NOT use progress events (fire-and-forget), but the new batch-vision MUST emit progress via broadcastToRenderer('vision:progress', {...}) since each image call takes ~1-2s.",
+      "Image URL resolution: ProdutoImagem.arquivo_path is relative (products) or absolute (playground). Resolution uses getDataDir() from src/main/db/database.ts. Frontend uses imageUrl(dataDir, filePath) + 'jf-img://local' custom scheme.",
+      "Renderer services are thin IPC wrappers: src/renderer/src/servicos/produtos.ts calls client['handler.name'](input). New vision service follows same pattern.",
+      "Routing via HashRouter in App.tsx: add <Route path='/vision' element={<VisionRevisaoPagina />} />. Nav item added to AppSidebar navItems array.",
+      "All text in Portuguese (BR): variable names, UI labels, IPC handler keys, DB columns. No English in user-facing strings.",
+      "Batch iteration pattern from batch-images.ts: sequential for-loop over files[], try/catch per item continues on failure, accumulates results array with per-item status."
+    ],
+    "approach": "Port InstaFlow's vision.ts with supermarket-domain prompt into src/main/ia/vision.ts — function analisarProdutoImagem(filePath, config) that reads file, base64-encodes it, calls generateText() via buildModelFactory(), parses JSON response into AnaliseVisionProduto. Create batch-vision.ts that iterates produto_imagens from DB sequentially, emits progress via broadcastToRenderer('vision:progress', {current, total, filename, resultado?}). Add two IPC handlers to tipc.ts ('vision.analisar' single + 'vision.batch' batch). Add IA tool 'analisar_imagem_produto' to tools.ts using 3-status pattern. Frontend: VisionRevisaoPagina.tsx with card grid [thumbnail + nome_atual + sugestao + confianca + aceitar/editar/rejeitar], batch accept button, progress bar during batch run. The existing atualizarProduto() service handles applying accepted suggestions. No DB schema changes needed — all fields (nome, nome_card, categoria) already exist on produtos table.",
+    "risks": [
+      "OpenRouter may not support vision/multimodal for all models — the tool must only be triggered when provider is 'gemini' or when the OpenRouter model explicitly supports vision (e.g. google/gemini-2.5-flash). Add a guard in vision.ts: if provider is openrouter and model doesn't start with 'google/', throw a descriptive error.",
+      "Base64 encoding large images (~5MB) per request will bloat memory if 30 images are queued simultaneously — sequential processing (1 at a time) mitigates this, but images should be read inside the loop, not pre-loaded into memory.",
+      "Rate limiting from Gemini API on batch of 30 images — add a small delay (e.g. 200ms) between calls in batch-vision.ts, configurable but defaulting to safe value.",
+      "JSON parse failure from Gemini (markdown code fences, extra text) — must clean response same way as InstaFlow: .replace(/```json\\n?/g,'').replace(/```\\n?/g,'').trim() before JSON.parse(). Fallback to partial data with confianca:0 on failure rather than throwing.",
+      "IPC handlers return a plain value — there is no streaming IPC primitive in tipc. Progress events for batch must use broadcastToRenderer() side-channel, same as ia:stream events. Frontend must listen via window.electron.ipcRenderer.on('vision:progress', ...) inside useEffect.",
+      "The batch vision page needs to load produto_imagens (products with images) — no existing handler returns products joined with their images in one call. Must either add a new IPC handler 'vision.listar_produtos_com_imagem' or call 'produtos.listar' + 'imagens.listar' per product (expensive). Recommended: add one SQL query handler.",
+      "Accepting a suggestion calls 'produtos.atualizar' which exists. Batch accept must loop sequentially to avoid hammering the DB write path simultaneously."
+    ],
+    "dependencies": [
+      "Vercel AI SDK 'ai' package — already installed (used by cliente.ts, tools.ts)",
+      "@ai-sdk/google — already installed (used by config.ts)",
+      "buildModelFactory from src/main/ia/config.ts — reuse as-is, no modifications",
+      "broadcastToRenderer from src/main/ia/cliente.ts — reuse for progress events",
+      "queryAll/queryOne/execute from src/main/db/query.ts — for fetching produtos_imagens in batch",
+      "getDataDir from src/main/db/database.ts — to resolve absolute image paths",
+      "atualizarProduto from src/main/servicos/produtos.ts — to apply accepted suggestions",
+      "AnaliseVisionProduto interface — new type to add to src/shared/types.ts",
+      "No new npm packages needed"
+    ],
+    "architecture_notes": {
+      "new_type": "AnaliseVisionProduto: {nome_sugerido, nome_card, marca, peso, categoria, confianca} + VisionProgressEvent: {current, total, filename, produto_id?, resultado?} — both go in src/shared/types.ts",
+      "ipc_channel_progress": "vision:progress — emitted via broadcastToRenderer during batch processing",
+      "ipc_handlers": [
+        "'vision.analisar' — input: {imagem_id: number} — resolves file path from DB, calls analisarProdutoImagem()",
+        "'vision.batch' — input: {produto_ids?: number[], limite?: number} — processes up to N products sequentially, emits progress events, returns summary",
+        "'vision.listar_pendentes' — no input — returns produtos with imagens that haven't been vision-analyzed yet (needs a flag OR just returns all with default images)"
+      ],
+      "vision_tool_in_chat": "IA tool 'analisar_imagem_produto' in tools.ts — accepts imagem_id, calls analisarProdutoImagem() internally, returns 3-status result. Chat user can say 'analisa a imagem do produto 123' and IA will trigger it.",
+      "frontend_page": "/vision route — tab or standalone page. Shows grid of cards: thumbnail (via imageUrl()), produto nome atual, sugestao IA nome+nome_card, confianca badge, action buttons. Progress bar overlay during batch. 'Aceitar Todos > 80%' button triggers loop of atualizarProduto calls."
+    }
+  },
+  "completed_at": "2026-03-13T02:45:00Z"
+}

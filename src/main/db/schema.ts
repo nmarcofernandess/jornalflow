@@ -32,8 +32,9 @@ const MIGRATIONS: Migration[] = [
 
       CREATE TABLE produto_imagens (
         imagem_id SERIAL PRIMARY KEY,
-        produto_id INT NOT NULL REFERENCES produtos(produto_id) ON DELETE CASCADE,
+        produto_id INT REFERENCES produtos(produto_id) ON DELETE CASCADE,
         arquivo_path TEXT NOT NULL,
+        nome_original TEXT,
         variacao TEXT,
         is_default BOOLEAN DEFAULT false,
         criado_em TIMESTAMP DEFAULT NOW()
@@ -122,6 +123,131 @@ const MIGRATIONS: Migration[] = [
         nao_encontrados INT,
         criado_em TIMESTAMP DEFAULT NOW()
       );
+    `
+  },
+  {
+    version: 2,
+    up: `
+      ALTER TABLE produto_imagens ALTER COLUMN produto_id DROP NOT NULL;
+      ALTER TABLE produto_imagens ADD COLUMN IF NOT EXISTS nome_original TEXT;
+    `
+  },
+  {
+    version: 3,
+    up: `
+      CREATE TABLE configuracao_ia (
+        id SERIAL PRIMARY KEY,
+        provider TEXT NOT NULL DEFAULT 'gemini',
+        api_key TEXT,
+        modelo TEXT,
+        provider_configs_json TEXT DEFAULT '{}',
+        ativo BOOLEAN NOT NULL DEFAULT true,
+        memoria_automatica BOOLEAN NOT NULL DEFAULT true,
+        criada_em TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      INSERT INTO configuracao_ia (provider, modelo)
+        VALUES ('gemini', 'gemini-2.0-flash');
+
+      CREATE TABLE ia_conversas (
+        id TEXT PRIMARY KEY,
+        titulo TEXT,
+        status TEXT NOT NULL DEFAULT 'ativo',
+        resumo_compactado TEXT,
+        criada_em TIMESTAMPTZ DEFAULT NOW(),
+        atualizada_em TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE INDEX idx_ia_conversas_status
+        ON ia_conversas (status, atualizada_em);
+
+      CREATE TABLE ia_mensagens (
+        id TEXT PRIMARY KEY,
+        conversa_id TEXT NOT NULL REFERENCES ia_conversas(id) ON DELETE CASCADE,
+        papel TEXT NOT NULL,
+        conteudo TEXT,
+        tool_calls_json TEXT,
+        anexos_meta_json TEXT,
+        criada_em TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE INDEX idx_ia_mensagens_conversa
+        ON ia_mensagens (conversa_id, criada_em);
+    `
+  },
+  {
+    version: 4,
+    up: `
+      CREATE TABLE knowledge_sources (
+        id SERIAL PRIMARY KEY,
+        tipo TEXT NOT NULL DEFAULT 'manual',
+        titulo TEXT NOT NULL,
+        conteudo_original TEXT,
+        metadata JSONB DEFAULT '{}',
+        importance TEXT NOT NULL DEFAULT 'low',
+        ativo BOOLEAN NOT NULL DEFAULT true,
+        criada_em TIMESTAMPTZ DEFAULT NOW(),
+        atualizada_em TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE knowledge_chunks (
+        id SERIAL PRIMARY KEY,
+        source_id INT NOT NULL REFERENCES knowledge_sources(id) ON DELETE CASCADE,
+        conteudo TEXT NOT NULL,
+        embedding vector(768),
+        search_tsv TSVECTOR,
+        importance TEXT NOT NULL DEFAULT 'low',
+        access_count INT NOT NULL DEFAULT 0,
+        last_accessed_at TIMESTAMPTZ,
+        criada_em TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE INDEX idx_kchunks_source ON knowledge_chunks(source_id);
+      CREATE INDEX idx_kchunks_fts ON knowledge_chunks USING GIN(search_tsv);
+      CREATE INDEX idx_kchunks_trgm ON knowledge_chunks USING GIN(conteudo gin_trgm_ops);
+    `
+  },
+  {
+    version: 5,
+    up: `
+      CREATE TABLE ia_memorias (
+        id SERIAL PRIMARY KEY,
+        conteudo TEXT NOT NULL,
+        origem TEXT NOT NULL DEFAULT 'manual',
+        embedding vector(768),
+        criada_em TIMESTAMPTZ DEFAULT NOW(),
+        atualizada_em TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE INDEX idx_ia_memorias_origem ON ia_memorias(origem);
+    `
+  },
+  {
+    version: 6,
+    up: `
+      CREATE TABLE knowledge_entities (
+        id SERIAL PRIMARY KEY,
+        nome TEXT NOT NULL,
+        tipo TEXT NOT NULL,
+        embedding vector(768),
+        origem TEXT NOT NULL DEFAULT 'sistema',
+        valid_from TIMESTAMPTZ DEFAULT NOW(),
+        valid_to TIMESTAMPTZ,
+        UNIQUE(nome, tipo)
+      );
+
+      CREATE TABLE knowledge_relations (
+        id SERIAL PRIMARY KEY,
+        entity_from_id INT NOT NULL REFERENCES knowledge_entities(id) ON DELETE CASCADE,
+        entity_to_id INT NOT NULL REFERENCES knowledge_entities(id) ON DELETE CASCADE,
+        tipo_relacao TEXT NOT NULL,
+        peso REAL NOT NULL DEFAULT 0.5,
+        valid_from TIMESTAMPTZ DEFAULT NOW(),
+        valid_to TIMESTAMPTZ
+      );
+
+      CREATE INDEX idx_knowledge_relations_from ON knowledge_relations(entity_from_id);
+      CREATE INDEX idx_knowledge_relations_to ON knowledge_relations(entity_to_id);
     `
   }
 ]

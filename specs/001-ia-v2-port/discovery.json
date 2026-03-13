@@ -1,0 +1,316 @@
+{
+  "status": "complete",
+  "findings": {
+    "relevant_files": [
+      "src/main/ia/config.ts",
+      "src/main/ia/cliente.ts",
+      "src/main/ia/tools.ts",
+      "src/main/ia/sistema-prompt.ts",
+      "src/main/db/schema.ts",
+      "src/main/db/database.ts",
+      "src/main/db/query.ts",
+      "src/main/db/seed.ts",
+      "src/main/tipc.ts",
+      "src/main/index.ts",
+      "src/shared/types.ts",
+      "src/renderer/src/paginas/IaPagina.tsx",
+      "src/renderer/src/paginas/ConfiguracoesPagina.tsx",
+      "src/renderer/src/componentes/ia/IaChatPanel.tsx",
+      "src/renderer/src/store/iaStore.ts",
+      "src/renderer/src/servicos/ia.ts",
+      "src/renderer/src/servicos/client.ts",
+      "src/renderer/src/App.tsx",
+      "package.json",
+      "electron.vite.config.ts",
+      "vitest.config.ts"
+    ],
+    "escalaflow_reference_files": [
+      "~/escalaflow/src/main/ia/config.ts",
+      "~/escalaflow/src/main/ia/cliente.ts",
+      "~/escalaflow/src/main/ia/discovery.ts",
+      "~/escalaflow/src/main/ia/session-processor.ts",
+      "~/escalaflow/src/main/ia/system-prompt.ts",
+      "~/escalaflow/src/main/ia/tools.ts",
+      "~/escalaflow/src/main/ia/local-llm.ts",
+      "~/escalaflow/src/main/knowledge/embeddings.ts",
+      "~/escalaflow/src/main/knowledge/search.ts",
+      "~/escalaflow/src/main/knowledge/chunking.ts",
+      "~/escalaflow/src/main/knowledge/ingest.ts",
+      "~/escalaflow/src/main/knowledge/graph.ts",
+      "~/escalaflow/src/main/db/pglite.ts",
+      "~/escalaflow/src/main/db/schema.ts",
+      "~/escalaflow/src/shared/types.ts"
+    ],
+    "patterns": [
+      "Pattern: VERSIONED MIGRATIONS — JornalFlow uses a MIGRATIONS[] array with {version, up: SQL_STRING}. applyMigrations() tracks via _migrations table. New tables go as new version entries (currently at v2). EscalaFlow uses a different pattern (DDL blocks + idempotent addColumnIfMissing), but JornalFlow's is simpler and should be kept.",
+      "Pattern: DB SINGLETON — JornalFlow's database.ts uses PGlite with NO extensions (no vector, no pg_trgm). EscalaFlow's pglite.ts uses PGlite.create() with {extensions: {vector, pg_trgm}} and CREATE EXTENSION. JornalFlow's database.ts needs to be upgraded to match.",
+      "Pattern: QUERY HELPERS — JornalFlow has queryAll, queryOne, execute, transaction. EscalaFlow adds insertReturningId (INSERT...RETURNING id with positional params) and execDDL. JornalFlow needs insertReturningId added.",
+      "Pattern: IPC ROUTER — tipc with t.procedure.input<Type>().action() pattern. Router is a flat object with dotted keys. IA handlers: 'ia.chat', 'ia.set_api_key', 'ia.get_api_key'. New IA handlers follow same pattern.",
+      "Pattern: RENDERER SERVICES — Thin IPC wrappers in src/renderer/src/servicos/*.ts. No business logic. Call client['route.name']({input}) and return.",
+      "Pattern: SHARED TYPES — All domain types in src/shared/types.ts. Both processes import via @shared/types. IaMensagem already exists but is minimal (role: 'user'|'assistant'|'system', content, tool_calls?, criado_em).",
+      "Pattern: ZUSTAND STORES — iaStore has messages[], open, loading with simple setters. No persistence. Will need expansion for conversations, streaming state, context tracking.",
+      "Pattern: TESTS — vitest with real PGlite (no mocks). Each suite: beforeAll(getDb + applyMigrations + seed), afterAll(closeDb). Tools tested by calling .execute() directly with mockOptions {toolCallId, messages, abortSignal}.",
+      "Pattern: AI SDK USAGE — JornalFlow uses ai@6.0.116 with generateText, stepCountIs. EscalaFlow uses both generateText and streamText from same SDK, plus generateObject for structured extraction.",
+      "Pattern: EXTERNALIZE DEPS — electron.vite.config.ts uses externalizeDepsPlugin() for main process. New npm deps (openrouter, huggingface) will be externalized automatically.",
+      "Pattern: MAIN INDEX BOOTSTRAP — index.ts loads .env.local, sets API key from env, ensures data dirs, initializes DB, applies migrations, seeds, then creates window. New init steps (e.g., loading IA config from DB) go here.",
+      "Pattern: TOOL OUTPUT — Current JornalFlow tools return {found: true/false, ...data} or {success: true/false, error?}. EscalaFlow uses 3-status pattern: {status: 'ok'|'vazio'|'erro', summary, data, _meta}. Migration to 3-status is explicit in PRD."
+    ],
+    "current_state_analysis": {
+      "ia_config": {
+        "file": "src/main/ia/config.ts",
+        "lines": 23,
+        "state": "Hardcoded Gemini only. In-memory apiKey variable. No DB persistence. No multi-provider. getModel() returns gemini-3-flash-preview fixed.",
+        "gap": "Need: DB-backed config (configuracao_ia table), factory pattern for Gemini/OpenRouter/Local, resolveModel(), resolveProviderApiKey(), buildModelFactory() — all from EscalaFlow."
+      },
+      "ia_cliente": {
+        "file": "src/main/ia/cliente.ts",
+        "lines": 23,
+        "state": "Single chat() function using generateText(). Returns plain text string. No streaming. No follow-up. No tool result handling. No history management.",
+        "gap": "Need: iaEnviarMensagem + iaEnviarMensagemStream matching EscalaFlow's ~750-line cliente.ts. BrowserWindow broadcast for streaming. Follow-up pattern. Tool result truncation. History compaction integration."
+      },
+      "ia_tools": {
+        "file": "src/main/ia/tools.ts",
+        "lines": 491,
+        "state": "15 tools with basic CRUD patterns. Return mixed formats ({found:bool}, {success:bool}). No tool result truncation. No 3-status pattern.",
+        "gap": "Need: Migrate existing 15 tools to 3-status pattern. Add ~10 new tools (buscar_conhecimento, sugerir_produtos, diagnosticar_jornal, etc.). Discovery design (entry tools -> detail tools)."
+      },
+      "ia_prompt": {
+        "file": "src/main/ia/sistema-prompt.ts",
+        "lines": 17,
+        "state": "Bare-bones static prompt. Just describes basic capabilities and rules. 17 lines total.",
+        "gap": "Need: Rich 9-section system prompt like EscalaFlow's (477 lines). Domain knowledge (secoes, layout rules, naming patterns). Tool usage guide. Schema reference. Workflow recipes. Formatting rules."
+      },
+      "database": {
+        "file": "src/main/db/database.ts",
+        "state": "PGlite with NO extensions. Constructor: new PGlite(dataDir). In-memory for tests. 10 tables, 2 migration versions.",
+        "gap": "Need: PGlite.create() with vector + pg_trgm extensions. 6+ new tables: configuracao_ia, ia_conversas, ia_mensagens, ia_memorias, knowledge_sources, knowledge_chunks, knowledge_entities, knowledge_relations. Migration v3+."
+      },
+      "frontend": {
+        "state": "IaPagina.tsx is a full-page chat. IaChatPanel.tsx is a sidebar panel. Both use iaStore (Zustand) which holds messages in-memory only. No conversation persistence. No streaming UI. No context awareness. ConfiguracoesPagina has single Gemini API key input.",
+        "gap": "Phase 1 frontend: streaming text display, tool call indicators. Settings: multi-provider UI with provider selector, per-provider API key/model fields. Later: conversation list, knowledge management UI."
+      }
+    },
+    "approach": "Port in 6 phases matching PRD. Phase 1 (Infra Base): upgrade database.ts with PGlite extensions, add new tables via migration v3, create config.ts with multi-provider factory, create cliente.ts with streaming+follow-up, update tipc.ts with new IA handlers, update frontend with streaming support and multi-provider settings. Phase 2 (Discovery): create discovery.ts with buildContextBriefing adapted for products/jornais domain. Phase 3 (Knowledge): copy+adapt knowledge/ layer from EscalaFlow (embeddings, chunking, ingest, search). Phase 4 (Memory): create session-processor.ts with extractMemories and maybeCompact. Phase 5 (Knowledge Graph): copy+adapt graph.ts. Phase 6 (Tools V2): migrate existing 15 tools to 3-status, add new tools.",
+    "risks": [
+      "CRITICAL: PGlite vector extension — JornalFlow currently uses basic PGlite constructor (new PGlite(dataDir)). EscalaFlow uses PGlite.create({extensions: {vector, pg_trgm}}). The database.ts initialization MUST change. Both projects use @electric-sql/pglite@0.3.x so vector extension should be available, but import paths need updating.",
+      "CRITICAL: Migration compatibility — Existing users have v1+v2 tables. New v3 migration must be additive (new tables, not altering existing). PGlite vector extension must be enabled BEFORE creating tables with vector(768) columns.",
+      "HIGH: @openrouter/ai-sdk-provider is alpha (^6.0.0-alpha.1 in EscalaFlow). May have API instability. Need graceful fallback.",
+      "HIGH: @huggingface/transformers for offline embeddings — ~150-440MB model download. Need graceful degradation if model unavailable. resolveModelPath() needs adaptation for JornalFlow's directory structure.",
+      "MEDIUM: Frontend breaking changes — PRD says 'zero breaking changes on frontend' but streaming replaces the request-response pattern. The ia.chat IPC handler must remain backward-compatible while adding ia.stream and ia.sessao.* handlers.",
+      "MEDIUM: Test infrastructure — Current tests use basic PGlite without extensions. Tests for knowledge layer need PGlite with vector+pg_trgm, which may require updating the test DB setup.",
+      "LOW: Bundle size — @huggingface/transformers and ONNX runtime are heavy. May impact build times and app size significantly.",
+      "LOW: EscalaFlow's query.ts uses positional params (?) while JornalFlow uses $1/$2 style. The knowledge layer SQL from EscalaFlow already uses $1 style for some queries — need to verify all queries use JornalFlow's convention."
+    ],
+    "dependencies": {
+      "existing_keep": [
+        "ai@^6.0.116 (Vercel AI SDK — already installed)",
+        "@ai-sdk/google@^3.0.43 (Gemini provider — already installed)",
+        "@electric-sql/pglite@^0.3.16 (PGlite — already installed, supports vector extension)",
+        "zod@^4.3.6 (schema validation — already installed)",
+        "zustand@^5.0.11 (state management — already installed)"
+      ],
+      "new_required": [
+        "@openrouter/ai-sdk-provider@^6.0.0-alpha.1 (OpenRouter multi-model access)",
+        "@huggingface/transformers@^3.8.1 (offline embeddings via ONNX — multilingual-e5-base)"
+      ],
+      "new_optional": [
+        "@ai-sdk/devtools@^0.0.15 (AI SDK dev tools viewer — devDependency only)"
+      ]
+    },
+    "file_changes_map": {
+      "modify": [
+        {
+          "file": "src/main/db/database.ts",
+          "reason": "Add PGlite.create() with vector+pg_trgm extensions, add CREATE EXTENSION statements"
+        },
+        {
+          "file": "src/main/db/schema.ts",
+          "reason": "Add migration v3 with 6+ new tables: configuracao_ia, ia_conversas, ia_mensagens, ia_memorias, knowledge_sources, knowledge_chunks, knowledge_entities, knowledge_relations"
+        },
+        {
+          "file": "src/main/db/query.ts",
+          "reason": "Add insertReturningId() helper function"
+        },
+        {
+          "file": "src/main/ia/config.ts",
+          "reason": "Replace with multi-provider factory (Gemini+OpenRouter). DB-backed config. resolveModel, resolveProviderApiKey, buildModelFactory"
+        },
+        {
+          "file": "src/main/ia/cliente.ts",
+          "reason": "Replace with full streaming+follow-up client. iaEnviarMensagem + iaEnviarMensagemStream + iaTestarConexao. BrowserWindow broadcast. Tool result truncation."
+        },
+        {
+          "file": "src/main/ia/sistema-prompt.ts",
+          "reason": "Expand from 17 to ~200+ lines. Domain-specific system prompt with 9 sections adapted from EscalaFlow pattern."
+        },
+        {
+          "file": "src/main/ia/tools.ts",
+          "reason": "Migrate 15 existing tools to 3-status pattern. Add new tools."
+        },
+        {
+          "file": "src/main/tipc.ts",
+          "reason": "Add ~15 new IA handlers: ia.stream, ia.config.*, ia.sessao.*, ia.conversas.*, ia.memorias.*, ia.knowledge.*"
+        },
+        {
+          "file": "src/main/index.ts",
+          "reason": "Update bootstrap: load IA config from DB instead of env-only, register IPC streaming listeners"
+        },
+        {
+          "file": "src/shared/types.ts",
+          "reason": "Add types: IaConfiguracao, IaConversa, IaMensagemDB, IaContexto, IaAnexo, IaStreamEvent, ToolCall, KnowledgeSource, KnowledgeChunk, KnowledgeEntity, KnowledgeRelation"
+        },
+        {
+          "file": "src/renderer/src/store/iaStore.ts",
+          "reason": "Expand: conversation management, streaming state, context tracking, persistent conversations"
+        },
+        {
+          "file": "src/renderer/src/servicos/ia.ts",
+          "reason": "Add streaming IPC listener, conversation CRUD, config management"
+        },
+        {
+          "file": "src/renderer/src/paginas/IaPagina.tsx",
+          "reason": "Add streaming text display, tool call indicators, conversation sidebar"
+        },
+        {
+          "file": "src/renderer/src/paginas/ConfiguracoesPagina.tsx",
+          "reason": "Multi-provider settings UI: provider selector, per-provider API key/model fields, test connection per provider"
+        },
+        {
+          "file": "src/renderer/src/componentes/ia/IaChatPanel.tsx",
+          "reason": "Match IaPagina streaming updates"
+        },
+        {
+          "file": "package.json",
+          "reason": "Add @openrouter/ai-sdk-provider, @huggingface/transformers dependencies"
+        }
+      ],
+      "create": [
+        {
+          "file": "src/main/ia/discovery.ts",
+          "reason": "Auto-discovery context briefing for system prompt injection. Adapted from EscalaFlow: resumo global (produtos, jornais), jornal em foco, alertas proativos, auto-RAG, page hints."
+        },
+        {
+          "file": "src/main/ia/session-processor.ts",
+          "reason": "Memory extraction (extractMemories) + history compaction (maybeCompact). Port from EscalaFlow."
+        },
+        {
+          "file": "src/main/knowledge/embeddings.ts",
+          "reason": "Offline embeddings via @huggingface/transformers. Port from EscalaFlow. generateQueryEmbedding, generatePassageEmbedding, generatePassageEmbeddings."
+        },
+        {
+          "file": "src/main/knowledge/chunking.ts",
+          "reason": "Recursive text splitter. Direct port from EscalaFlow (domain-agnostic)."
+        },
+        {
+          "file": "src/main/knowledge/ingest.ts",
+          "reason": "Ingestion pipeline: source -> chunk -> embed -> FTS. Port from EscalaFlow."
+        },
+        {
+          "file": "src/main/knowledge/search.ts",
+          "reason": "Hybrid search: 70% vector + 30% FTS + trigram. Port from EscalaFlow."
+        },
+        {
+          "file": "src/main/knowledge/graph.ts",
+          "reason": "Knowledge graph: entity extraction, graph traversal, graph enrichment. Port from EscalaFlow."
+        },
+        {
+          "file": "src/main/db/seed-knowledge.ts",
+          "reason": "Seed knowledge base with domain content: secoes, layout rules, naming patterns."
+        },
+        {
+          "file": "tests/ia/config.test.ts",
+          "reason": "Tests for multi-provider config, resolveModel, resolveProviderApiKey"
+        },
+        {
+          "file": "tests/ia/cliente.test.ts",
+          "reason": "Tests for chat message building, tool call extraction, follow-up logic"
+        },
+        {
+          "file": "tests/knowledge/chunking.test.ts",
+          "reason": "Tests for text chunking"
+        },
+        {
+          "file": "tests/knowledge/search.test.ts",
+          "reason": "Tests for hybrid search (may need PGlite with vector extension)"
+        }
+      ]
+    },
+    "escalaflow_adaptation_notes": {
+      "domain_mapping": {
+        "CLT/RH domain": "produtos/jornais domain",
+        "setores": "secoes (template_secoes, jornal_secoes)",
+        "colaboradores": "produtos",
+        "escalas": "jornais",
+        "alocacoes": "jornal_itens",
+        "demandas": "N/A (no demand planning equivalent)",
+        "excecoes": "importacoes (spreadsheet import events)",
+        "regras": "layout rules (grid, naming conventions)"
+      },
+      "discovery_adaptation": {
+        "resumo_global": "Count of produtos_ativos, produtos_com_imagem, total_imagens, total_jornais, jornais_rascunho",
+        "jornal_em_foco": "If rota contains editor or jornal_id: load jornal details, secoes, item counts, import stats",
+        "alertas_proativos": "Produtos sem imagem, secoes vazias, jornal com itens fallback, precos zerados",
+        "auto_rag": "Same pattern — busca conhecimento relevante a partir da mensagem do usuario",
+        "memorias": "Same pattern — fatos sobre o supermercado, preferencias de layout",
+        "dica_pagina": "Map JornalFlow routes: dashboard, produtos, editor, historico, galeria, configuracoes, ia"
+      },
+      "system_prompt_sections": [
+        "1. Identidade (assistente do JornalFlow, Sup Fernandes)",
+        "2. Dominio (secoes do jornal, categorias de produtos, fluxo de importacao)",
+        "3. Schema de referencia (tabelas e campos relevantes)",
+        "4. Tools guide (quando usar cada tool, discovery design)",
+        "5. Workflows comuns (importar planilha, revisar jornal, buscar produto, trocar imagem)",
+        "6. Formatacao de respostas (markdown rules)",
+        "7. Memorias e Conhecimento (quando salvar, quando buscar)",
+        "8. Contexto automatico (o que o discovery injeta)",
+        "9. Conduta e limitacoes"
+      ],
+      "query_param_style": "JornalFlow uses $1, $2 parameterized queries. EscalaFlow's query.ts converts ? to $1 internally. Knowledge layer SQL from EscalaFlow already uses $1 style in some places but ? in others — MUST normalize to $1 for JornalFlow."
+    },
+    "phase_complexity_estimates": {
+      "phase_1_infra": {
+        "files_to_change": 10,
+        "files_to_create": 2,
+        "estimated_lines": 800,
+        "complexity": "high",
+        "notes": "Core infrastructure. database.ts upgrade is the riskiest part. Must maintain backward compat with existing data."
+      },
+      "phase_2_discovery": {
+        "files_to_change": 1,
+        "files_to_create": 1,
+        "estimated_lines": 200,
+        "complexity": "medium",
+        "notes": "Mostly SQL queries adapted to JornalFlow schema. Less complex than EscalaFlow's (fewer entities)."
+      },
+      "phase_3_knowledge": {
+        "files_to_change": 0,
+        "files_to_create": 5,
+        "estimated_lines": 400,
+        "complexity": "high",
+        "notes": "Near-direct port. chunking.ts is domain-agnostic. embeddings.ts needs path adaptation. search.ts and ingest.ts need $1 param normalization."
+      },
+      "phase_4_memory": {
+        "files_to_change": 0,
+        "files_to_create": 1,
+        "estimated_lines": 200,
+        "complexity": "medium",
+        "notes": "Direct port. extractMemories + maybeCompact. Depends on Phase 3 for embeddings."
+      },
+      "phase_5_graph": {
+        "files_to_change": 0,
+        "files_to_create": 1,
+        "estimated_lines": 350,
+        "complexity": "medium",
+        "notes": "Near-direct port. Entity extraction prompt needs domain adaptation (produtos, secoes, categorias)."
+      },
+      "phase_6_tools_v2": {
+        "files_to_change": 1,
+        "files_to_create": 0,
+        "estimated_lines": 600,
+        "complexity": "medium",
+        "notes": "Refactor 15 existing tools + add ~10 new. 3-status pattern is formulaic once established."
+      }
+    }
+  },
+  "completed_at": "2026-03-12T03:45:00Z"
+}

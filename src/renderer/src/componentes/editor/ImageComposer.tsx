@@ -3,6 +3,7 @@ import { ImagePicker } from './ImagePicker'
 import { Button } from '@renderer/components/ui/button'
 import { Plus, X } from 'lucide-react'
 import type { ProdutoImagem } from '@shared/types'
+import { useDataDir, imageUrl } from '@renderer/lib/image-url'
 
 interface ImageComposerProps {
   produto_id: number
@@ -13,6 +14,7 @@ interface ImageComposerProps {
 const MAX_SLOTS = 3
 
 export function ImageComposer({ produto_id, imgs_compostas, onChange }: ImageComposerProps) {
+  const dataDir = useDataDir()
   const paths = imgs_compostas || []
   const [picker_slot, setPickerSlot] = useState<number | null>(null)
 
@@ -53,7 +55,7 @@ export function ImageComposer({ produto_id, imgs_compostas, onChange }: ImageCom
                 className="relative rounded-md border overflow-hidden aspect-square flex-1 max-w-[80px] group"
               >
                 <img
-                  src={`file://${path}`}
+                  src={imageUrl(dataDir, path)}
                   alt={`Imagem ${index + 1}`}
                   className="w-full h-full object-cover"
                 />

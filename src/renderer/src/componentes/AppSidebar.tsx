@@ -1,12 +1,14 @@
 import { NavLink } from 'react-router-dom'
-import { Home, Package, Newspaper, Clock, Settings, Bot } from 'lucide-react'
+import { Home, Package, ImageIcon, Newspaper, Clock, Settings, Bot, ScanEye } from 'lucide-react'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: Home },
   { to: '/produtos', label: 'Produtos', icon: Package },
+  { to: '/galeria', label: 'Galeria', icon: ImageIcon },
   { to: '/editor', label: 'Editor', icon: Newspaper },
   { to: '/historico', label: 'Histórico', icon: Clock },
   { to: '/ia', label: 'Assistente IA', icon: Bot },
+  { to: '/vision', label: 'Vision AI', icon: ScanEye },
   { to: '/configuracoes', label: 'Configurações', icon: Settings },
 ]
 

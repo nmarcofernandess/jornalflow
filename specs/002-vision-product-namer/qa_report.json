@@ -1,0 +1,40 @@
+{
+  "status": "needs_fixes",
+  "qa_result": {
+    "tests": {
+      "unit": "pass",
+      "typecheck": "pass",
+      "integration": "skipped"
+    },
+    "code_review": {
+      "security": "pass",
+      "patterns": "fail",
+      "quality": "pass"
+    },
+    "issues": [
+      {
+        "id": 1,
+        "severity": "critical",
+        "type": "bug",
+        "file": "src/main/ia/batch-vision.ts",
+        "line": 79,
+        "description": "Path resolution injects a spurious 'imagens/' segment before arquivo_path. The actual relative path stored in DB by adicionarImagem() is 'images/products/{codigo}/{filename}' (see imagens.ts line 35). So path.join(getDataDir(), 'imagens', item.arquivo_path) produces {dataDir}/imagens/images/products/{codigo}/{filename} which does not exist — every readFile call in the batch will throw ENOENT and every item will be counted as a failure.",
+        "fix_required": "Change line 79 to: const arquivoPath = path.isAbsolute(item.arquivo_path) ? item.arquivo_path : path.join(getDataDir(), item.arquivo_path). This matches the correct pattern used in imagens.ts (removerImagem line 138, atribuirAProduto line 93) and in the vision.analisar IPC handler (tipc.ts line 676-677)."
+      }
+    ],
+    "suggestions": [
+      {
+        "file": "src/renderer/src/paginas/VisionRevisaoPagina.tsx",
+        "line": 347,
+        "description": "totalAcima80 counts results without excluding rejected items, so the 'Aceitar todos > 80% (N)' button count can be misleading — e.g. showing '5' but only 3 will actually be accepted because 2 were rejected. Consider filtering rejeitados out of the count: Array.from(resultados.entries()).filter(([produto_id, r]) => r.confianca > 80 && !rejeitados.has(produto_id)).length"
+      },
+      {
+        "file": "src/main/ia/batch-vision.ts",
+        "line": 44,
+        "description": "Discovery risk note: batch handler does not guard against OpenRouter models that may not support vision. If the configured model is an OpenRouter non-vision model, the Gemini vision call will fail per-item (caught gracefully). Consider logging a warning when provider is 'openrouter' and model does not start with 'google/' to aid debugging."
+      }
+    ],
+    "verdict": "NEEDS_FIXES"
+  },
+  "completed_at": "2026-03-13T07:00:00Z"
+}

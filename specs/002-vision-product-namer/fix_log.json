@@ -1,0 +1,18 @@
+{
+  "status": "complete",
+  "fixes": {
+    "issues_fixed": [
+      {
+        "issue_id": 1,
+        "severity": "critical",
+        "file": "src/main/ia/batch-vision.ts",
+        "description": "Removed spurious 'imagens/' segment from path resolution. Changed path.join(getDataDir(), 'imagens', item.arquivo_path) to path.join(getDataDir(), item.arquivo_path). DB stores arquivo_path as 'images/products/{codigo}/{filename}' so the old join produced {dataDir}/imagens/images/products/{codigo}/{filename} which never existed, causing every batch item to fail with ENOENT. Now matches the correct pattern used in imagens.ts and tipc.ts vision.analisar handler.",
+        "verification": "npx tsc --noEmit — clean exit, zero errors"
+      }
+    ],
+    "issues_remaining": [],
+    "tests_after_fix": "pass",
+    "ready_for_qa": true
+  },
+  "completed_at": "2026-03-13T08:00:00Z"
+}
